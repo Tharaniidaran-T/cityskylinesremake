@@ -1610,15 +1610,69 @@ interface IsoMapProps {
 }
 
 const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, hoveredTool, population, stats, quality = 'standard' }) => {
-  const [hoveredTile, setHoveredTile] = useState<{x: number, y: number} | null>(null);
+  const [hoveredTile, setHoveredTile] = useState<{x: number, y: number} | null>({ x: 5, y: 5 });
 
   const handleHover = useCallback((x: number, y: number) => {
     setHoveredTile({ x, y });
   }, []);
 
   const handleLeave = useCallback(() => {
-    setHoveredTile(null);
+    // Keep selection active for keyboard usability so it never resets to null
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isInput = document.activeElement && 
+        (document.activeElement.tagName === 'INPUT' || 
+         document.activeElement.tagName === 'TEXTAREA' || 
+         document.activeElement.getAttribute('contenteditable') === 'true');
+      if (isInput) return;
+
+      const current = hoveredTile || { x: 5, y: 5 };
+      let nextX = current.x;
+      let nextY = current.y;
+
+      switch (e.key) {
+        case 'ArrowUp':
+        case 'w':
+        case 'W':
+          nextY = Math.max(0, current.y - 1);
+          setHoveredTile({ x: nextX, y: nextY });
+          break;
+        case 'ArrowDown':
+        case 's':
+        case 'S':
+          nextY = Math.min(grid.length - 1, current.y + 1);
+          setHoveredTile({ x: nextX, y: nextY });
+          break;
+        case 'ArrowLeft':
+        case 'a':
+        case 'A':
+          nextX = Math.max(0, current.x - 1);
+          setHoveredTile({ x: nextX, y: nextY });
+          break;
+        case 'ArrowRight':
+        case 'd':
+        case 'D':
+          nextX = Math.min(grid[0].length - 1, current.x + 1);
+          setHoveredTile({ x: nextX, y: nextY });
+          break;
+        case 'Enter':
+          e.preventDefault();
+          if (hoveredTile) {
+            onTileClick(hoveredTile.x, hoveredTile.y);
+          }
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [hoveredTile, grid, onTileClick]);
 
   // Preview Logic
   const showPreview = hoveredTile && grid[hoveredTile.y][hoveredTile.x].buildingType === BuildingType.None && hoveredTool !== BuildingType.None;
@@ -1723,7 +1777,7 @@ const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, hoveredTool, populat
                     grid={grid}
                     onHover={handleHover}
                     onLeave={handleLeave}
-                    onClick={onTileClick}
+                    onClick={handleHover}
                     unlocked={tile.unlocked !== false}
                     districtId={tile.districtId}
                 />

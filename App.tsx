@@ -702,29 +702,14 @@ function App() {
         let newGrid = currentGrid.map(row => [...row]);
         newGrid[y][x] = { ...currentTile, unlocked: true };
         
-        let didExpand = false;
-        // Auto-expand map infinitely if purchased tile is near the border!
-        if (x <= 1 || y <= 1 || x >= currentGrid[0].length - 2 || y >= currentGrid.length - 2) {
-          newGrid = expandGrid(newGrid);
-          didExpand = true;
-        }
-
         setGrid(newGrid);
         setStats(prev => ({ ...prev, money: prev.money - tileCost }));
         
         addNewsItem({
           id: (Date.now() + Math.random()).toString(),
-          text: `🗺️ Expanded city boundary! Purchased territory tile at [${x + 1}, ${y + 1}] for $${tileCost}.`,
+          text: `🗺️ Purchased territory tile at [${x + 1}, ${y + 1}] for $${tileCost}.`,
           type: 'positive'
         });
-
-        if (didExpand) {
-          addNewsItem({
-            id: (Date.now() + Math.random()).toString(),
-            text: `🗺️ Floating Island expanded! Added new uncharted territories around the grid.`,
-            type: 'positive'
-          });
-        }
       } else {
         addNewsItem({
           id: (Date.now() + Math.random()).toString(),

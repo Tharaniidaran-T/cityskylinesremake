@@ -773,6 +773,17 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         
         {/* Toolbar - Responsive horizontal layout */}
         <div className="flex flex-col gap-2 w-full lg:w-auto">
+          {/* Floating Controls Overlay */}
+          <div className="bg-slate-950/95 border border-indigo-500/35 p-2 px-3 rounded-xl text-[9px] md:text-[10px] leading-snug text-indigo-200 shadow-xl font-mono flex items-center gap-2 max-w-full select-none backdrop-blur-md self-start pointer-events-auto">
+            <span className="text-sm">⌨️</span>
+            <div>
+              <strong className="text-indigo-400 font-sans uppercase tracking-wider block text-[8px] md:text-[9px]">Controls Panel (Keyboard + Mouse)</strong>
+              <div className="opacity-95 text-slate-300">
+                <span className="text-amber-400 font-bold">[W][A][S][D] / Arrows</span> to navigate grid selection | <span className="text-green-400 font-bold">[Enter]</span> to place/merge/purchase | <span className="text-indigo-400 font-bold">Click</span> tile to select
+              </div>
+            </div>
+          </div>
+
           {/* Detailed Drop-up options construct drawer representing categories (Road, Residential, etc.) */}
           {activeCategory && (() => {
             const cat = categories.find(c => c.id === activeCategory);
@@ -1016,7 +1027,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
             <div className="bg-cyan-950/20 border border-cyan-800/30 p-2 rounded-lg text-[9px] md:text-[10px] leading-relaxed text-cyan-200/90 font-mono">
               <p className="font-bold text-cyan-300 mb-0.5">Fusion Mechanics:</p>
               <ul className="list-disc pl-3.5 space-y-0.5 select-none text-[8px] md:text-[9.5px]">
-                <li><strong className="text-white">Stack Upgrade & Merge</strong>: Click on an existing building with its matching tool to manually upgrade and merge to the next higher tier!</li>
+                <li><strong className="text-white">Stack Upgrade & Merge</strong>: Select an existing building and select its matching construction tool, then press <span className="text-indigo-400 font-bold">[Enter]</span> to manually upgrade and merge to the next higher tier!</li>
               </ul>
             </div>
 
@@ -1168,7 +1179,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                     ⚡ <strong className="text-cyan-400 font-medium">Utilities & Services</strong>: Build Water Pumps, Sewage Treatment, and Power Plants to keep shortages at bay. Deficits rapidly drain happiness once population passes the 500 mark.
                   </li>
                   <li>
-                    💵 <strong className="text-cyan-400 font-medium font-bold">Expansion Borders</strong>: Click on locked boundary zones to purchase and unlock more territory, giving you wider grids to assemble grand complexes.
+                    💵 <strong className="text-cyan-400 font-medium font-bold">Expansion Borders</strong>: Hover or click on locked boundary zones of the 12x12 island and press <span className="text-indigo-400 font-bold">[Enter]</span> to purchase and unlock more territory, maximizing your available building space.
                   </li>
                 </ul>
               </section>

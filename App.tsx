@@ -1,7 +1,7 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- */
+*/
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Grid, TileData, BuildingType, CityStats, AIGoal, NewsItem } from './types';
 import { GRID_SIZE, BUILDINGS, TICK_RATE_MS, INITIAL_MONEY, BUILDING_TIERS } from './constants';
@@ -866,7 +866,7 @@ function App() {
 
   return (
     <div className="relative w-screen h-screen overflow-hidden selection:bg-transparent selection:text-transparent bg-sky-900">
-      {/* 3D Rendering Layer */}
+      {/* 3D Rendering Layer - Always visible now, providing background for start screen */}
       <IsoMap 
         grid={grid} 
         onTileClick={handleTileClick} 
@@ -876,8 +876,13 @@ function App() {
         quality={quality}
       />
       
-      {/* UI Layer - Always render but hidden initially */}
-      <div className={gameStarted ? 'block' : 'hidden'}>
+      {/* Start Screen Overlay */}
+      {!gameStarted && (
+        <StartScreen onStart={handleStart} />
+      )}
+
+      {/* UI Layer */}
+      {gameStarted && (
         <UIOverlay
           stats={stats}
           setStats={setStats}
@@ -893,11 +898,6 @@ function App() {
           quality={quality}
           onSetQuality={setQuality}
         />
-      </div>
-
-      {/* Start Screen Overlay */}
-      {!gameStarted && (
-        <StartScreen onStart={handleStart} />
       )}
 
       {/* CSS for animations and utility */}

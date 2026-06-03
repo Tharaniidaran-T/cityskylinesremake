@@ -1123,7 +1123,8 @@ const TrafficSystem = ({ grid }: { grid: Grid }) => {
   useFrame(() => {
     if (!carsRef.current || roadTiles.length < 2 || carsState.current.length === 0) return;
 
-    for (let i = 0; i < carCount; i++) {
+    const activeCount = Math.min(carCount, Math.floor(carsState.current.length / 6));
+    for (let i = 0; i < activeCount; i++) {
       const idx = i * 6;
       let curX = carsState.current[idx];
       let curY = carsState.current[idx+1];
@@ -1272,7 +1273,8 @@ const PopulationSystem = ({ population, grid }: { population: number, grid: Grid
         if (!meshRef.current || agentCount === 0 || agentsState.current.length === 0) return;
         const time = state.clock.elapsedTime;
 
-        for(let i=0; i<agentCount; i++) {
+        const activeCount = Math.min(agentCount, Math.floor(agentsState.current.length / 6));
+        for(let i=0; i<activeCount; i++) {
             const idx = i*6;
             let x = agentsState.current[idx];
             let y = agentsState.current[idx+1];

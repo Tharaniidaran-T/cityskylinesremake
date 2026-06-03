@@ -1554,9 +1554,10 @@ interface IsoMapProps {
   hoveredTool: BuildingType;
   population: number;
   stats: CityStats;
+  quality?: 'standard' | 'high';
 }
 
-const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, hoveredTool, population, stats }) => {
+const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, hoveredTool, population, stats, quality = 'standard' }) => {
   const [hoveredTile, setHoveredTile] = useState<{x: number, y: number} | null>(null);
 
   const handleHover = useCallback((x: number, y: number) => {
@@ -1576,7 +1577,12 @@ const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, hoveredTool, populat
 
   return (
     <div className="absolute inset-0 bg-sky-900 touch-none">
-      <Canvas shadows={{ type: THREE.BasicShadowMap }} dpr={1} gl={{ antialias: false, powerPreference: "high-performance" }}>
+      <Canvas 
+        key={quality}
+        shadows={{ type: quality === 'high' ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap }} 
+        dpr={quality === 'high' ? (typeof window !== 'undefined' ? Math.min(2, window.devicePixelRatio) : 2) : 1} 
+        gl={{ antialias: quality === 'high', powerPreference: "high-performance" }}
+      >
         <OrthographicCamera makeDefault zoom={45} position={[20, 20, 20]} near={-100} far={200} />
         
         <MapControls 
@@ -1595,9 +1601,10 @@ const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, hoveredTool, populat
           position={[15, 20, 10]}
           intensity={2}
           color="#fffbeb"
-          shadow-mapSize={[512, 512]}
+          shadow-mapSize={quality === 'high' ? [2048, 2048] : [512, 512]}
           shadow-camera-left={-15} shadow-camera-right={15}
           shadow-camera-top={15} shadow-camera-bottom={-15}
+          shadow-bias={quality === 'high' ? -0.0005 : -0.001}
         >
         </directionalLight>
         <Environment preset="city" />

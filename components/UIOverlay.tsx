@@ -18,6 +18,8 @@ interface UIOverlayProps {
   aiEnabled: boolean;
   paintingDistrictId: string | null;
   onSelectDistrictPaint: (id: string | null) => void;
+  quality: 'standard' | 'high';
+  onSetQuality: (q: 'standard' | 'high') => void;
 }
 
 const tools = [
@@ -106,6 +108,8 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
   aiEnabled,
   paintingDistrictId,
   onSelectDistrictPaint,
+  quality,
+  onSetQuality,
 }) => {
   const newsRef = useRef<HTMLDivElement>(null);
   const [showFusionGuide, setShowFusionGuide] = useState(false);
@@ -466,6 +470,25 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
               <span className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none">Day</span>
               <span className="text-xs md:text-sm font-bold text-white font-mono leading-none">{stats.day}</span>
             </div>
+
+            <div className="w-px h-6 bg-slate-800 hidden md:block"></div>
+
+            {/* Graphics Quality Control Toggle */}
+            <div className="flex items-center gap-1 bg-slate-900 border border-slate-800/80 px-2 py-1 rounded-lg">
+              <span className="text-[7.2px] text-slate-400 font-bold uppercase tracking-widest leading-none font-sans">RESO</span>
+              <button
+                onClick={() => onSetQuality(quality === 'high' ? 'standard' : 'high')}
+                className={`py-0.5 px-1.5 rounded font-black text-[9px] uppercase transition-all select-none cursor-pointer border flex items-center gap-1
+                  ${quality === 'high' 
+                    ? 'bg-indigo-600 hover:bg-indigo-500 border-indigo-400 text-white shadow-[0_0_8px_rgba(99,102,241,0.3)]' 
+                    : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-400'}`}
+                title={quality === 'high' ? "High Quality: Crisp high DPI, soft realistic shadows, and anti-aliasing" : "Standard Quality: Faster performance, standard shadows"}
+              >
+                <span>{quality === 'high' ? '✨ HIGH' : '⚡ STD'}</span>
+              </button>
+            </div>
+
+            <div className="w-px h-6 bg-slate-800 hidden md:block"></div>
 
             {/* Dashboard Opener Button */}
             <button

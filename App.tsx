@@ -136,6 +136,17 @@ function App() {
   // --- Game State ---
   const [gameStarted, setGameStarted] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(true);
+  const [quality, setQuality] = useState<'standard' | 'high'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('skymetropolis-quality');
+      if (saved === 'high' || saved === 'standard') return saved;
+    }
+    return 'standard';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('skymetropolis-quality', quality);
+  }, [quality]);
 
   const [grid, setGrid] = useState<Grid>(createInitialGrid);
   const [stats, setStats] = useState<CityStats>({
@@ -862,6 +873,7 @@ function App() {
         hoveredTool={selectedTool}
         population={stats.population}
         stats={stats}
+        quality={quality}
       />
       
       {/* Start Screen Overlay */}
@@ -883,6 +895,8 @@ function App() {
           aiEnabled={aiEnabled}
           paintingDistrictId={paintingDistrictId}
           onSelectDistrictPaint={setPaintingDistrictId}
+          quality={quality}
+          onSetQuality={setQuality}
         />
       )}
 

@@ -179,6 +179,7 @@ function App() {
   });
   const [selectedTool, setSelectedTool] = useState<BuildingType>(BuildingType.Road);
   const [paintingDistrictId, setPaintingDistrictId] = useState<string | null>(null);
+  const [isBuyLandMode, setIsBuyLandMode] = useState<boolean>(false);
   
   // --- AI State ---
   const [currentGoal, setCurrentGoal] = useState<AIGoal | null>(null);
@@ -697,6 +698,14 @@ function App() {
 
     // Locked Territory purchasing
     if (currentTile.unlocked === false) {
+      if (!isBuyLandMode) {
+        addNewsItem({
+          id: (Date.now() + Math.random()).toString(),
+          text: `⚠️ Enable 'Buy Land' mode in the bottom toolbar to purchase new territory at [${x + 1}, ${y + 1}] for $250.`,
+          type: 'neutral'
+        });
+        return;
+      }
       const tileCost = 250;
       if (currentStats.money >= tileCost) {
         let newGrid = currentGrid.map(row => [...row]);
@@ -843,7 +852,7 @@ function App() {
         });
       }
     }
-  }, [selectedTool, addNewsItem, gameStarted, paintingDistrictId]);
+  }, [selectedTool, addNewsItem, gameStarted, paintingDistrictId, isBuyLandMode]);
 
   const handleClaimReward = () => {
     if (currentGoal && currentGoal.completed) {
@@ -853,6 +862,28 @@ function App() {
       fetchNewGoal();
     }
   };
+
+  const handleSelectTool = useCallback((tool: BuildingType) => {
+    setSelectedTool(tool);
+    setIsBuyLandMode(false);
+    setPaintingDistrictId(null);
+  }, []);
+
+  const handleSelectDistrictPaint = useCallback((id: string | null) => {
+    setPaintingDistrictId(id);
+    if (id !== null) {
+      setIsBuyLandMode(false);
+      setSelectedTool(BuildingType.None);
+    }
+  }, []);
+
+  const handleToggleBuyLandMode = useCallback((active: boolean) => {
+    setIsBuyLandMode(active);
+    if (active) {
+      setSelectedTool(BuildingType.None);
+      setPaintingDistrictId(null);
+    }
+  }, []);
 
   const handleStart = (enabled: boolean) => {
     setAiEnabled(enabled);
@@ -869,6 +900,7 @@ function App() {
         population={stats.population}
         stats={stats}
         quality={quality}
+        isBuyLandMode={isBuyLandMode}
       />
       
       {/* Start Screen Overlay */}
@@ -882,16 +914,18 @@ function App() {
           stats={stats}
           setStats={setStats}
           selectedTool={selectedTool}
-          onSelectTool={setSelectedTool}
+          onSelectTool={handleSelectTool}
           currentGoal={currentGoal}
           newsFeed={newsFeed}
           onClaimReward={handleClaimReward}
           isGeneratingGoal={isGeneratingGoal}
           aiEnabled={aiEnabled}
           paintingDistrictId={paintingDistrictId}
-          onSelectDistrictPaint={setPaintingDistrictId}
+          onSelectDistrictPaint={handleSelectDistrictPaint}
           quality={quality}
           onSetQuality={setQuality}
+          isBuyLandMode={isBuyLandMode}
+          onToggleBuyLandMode={handleToggleBuyLandMode}
         />
       )}
 

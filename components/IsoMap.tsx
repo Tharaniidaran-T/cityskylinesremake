@@ -1607,9 +1607,10 @@ interface IsoMapProps {
   population: number;
   stats: CityStats;
   quality?: 'standard' | 'high';
+  isBuyLandMode: boolean;
 }
 
-const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, hoveredTool, population, stats, quality = 'standard' }) => {
+const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, hoveredTool, population, stats, quality = 'standard', isBuyLandMode }) => {
   const [hoveredTile, setHoveredTile] = useState<{x: number, y: number} | null>({ x: 5, y: 5 });
 
   const handleHover = useCallback((x: number, y: number) => {
@@ -1839,14 +1840,28 @@ const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, hoveredTool, populat
             )}
 
             {/* Highlight */}
-            {hoveredTile && (
-              <Cursor 
-                x={hoveredTile.x} 
-                y={hoveredTile.y} 
-                color={isBulldoze ? '#ef4444' : (showPreview ? '#ffffff' : '#000000')} 
-                gridLength={grid.length}
-              />
-            )}
+            {hoveredTile && (() => {
+              const currentTile = grid[hoveredTile.y][hoveredTile.x];
+              const isLocked = currentTile.unlocked === false;
+              let highlightColor = '#ffffff';
+              if (isLocked) {
+                highlightColor = isBuyLandMode ? '#22c55e' : '#f87171';
+              } else if (isBulldoze) {
+                highlightColor = '#ef4444';
+              } else if (showPreview) {
+                highlightColor = '#ffffff';
+              } else {
+                highlightColor = '#ffffff';
+              }
+              return (
+                <Cursor 
+                  x={hoveredTile.x} 
+                  y={hoveredTile.y} 
+                  color={highlightColor} 
+                  gridLength={grid.length}
+                />
+              );
+            })()}
           </group>
         </group>
         

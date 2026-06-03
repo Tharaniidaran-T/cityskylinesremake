@@ -20,6 +20,8 @@ interface UIOverlayProps {
   onSelectDistrictPaint: (id: string | null) => void;
   quality: 'standard' | 'high';
   onSetQuality: (q: 'standard' | 'high') => void;
+  isBuyLandMode: boolean;
+  onToggleBuyLandMode: (val: boolean) => void;
 }
 
 const tools = [
@@ -110,6 +112,8 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
   onSelectDistrictPaint,
   quality,
   onSetQuality,
+  isBuyLandMode,
+  onToggleBuyLandMode,
 }) => {
   const newsRef = useRef<HTMLDivElement>(null);
   const [showFusionGuide, setShowFusionGuide] = useState(false);
@@ -218,6 +222,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
   }, [selectedTool]);
 
   const handleCategoryClick = (catId: string) => {
+    onToggleBuyLandMode(false);
     if (activeCategory === catId) {
       setActiveCategory(null);
       onSelectTool(BuildingType.None);
@@ -779,7 +784,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
             <div>
               <strong className="text-indigo-400 font-sans uppercase tracking-wider block text-[8px] md:text-[9px]">Controls Panel (Keyboard + Mouse)</strong>
               <div className="opacity-95 text-slate-300">
-                <span className="text-amber-400 font-bold">[W][A][S][D] / Arrows</span> to navigate grid selection | <span className="text-green-400 font-bold">[Enter]</span> to place/merge/purchase | <span className="text-indigo-400 font-bold">Click</span> tile to select
+                <span className="text-amber-400 font-bold">[W][A][S][D] / Arrows</span> to navigate grid selection | <span className="text-green-400 font-bold">[Enter]</span> to build/merge (or purchase in 'Buy Land' mode) | <span className="text-indigo-400 font-bold">Click</span> tile to select
               </div>
             </div>
           </div>
@@ -902,11 +907,12 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                   onSelectTool(BuildingType.None);
                   setActiveCategory(null);
                   onSelectDistrictPaint(null);
+                  onToggleBuyLandMode(false);
                 }}
                 className={`
                   relative flex flex-col items-center justify-center rounded-xl border-2 transition-all shadow-lg backdrop-blur-md flex-shrink-0
                   w-14 h-14 md:w-16 md:h-16 cursor-pointer select-none
-                  ${selectedTool === BuildingType.None && paintingDistrictId === null
+                  ${selectedTool === BuildingType.None && paintingDistrictId === null && !isBuyLandMode
                     ? 'border-red-500 bg-red-950/40 scale-105 z-10 font-bold' 
                     : 'border-slate-800 bg-slate-950/80 hover:bg-slate-900'}
                 `}
@@ -914,6 +920,25 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
               >
                 <span className="text-lg md:text-xl">🚜</span>
                 <span className="text-[7.5px] md:text-[9px] font-bold text-red-400 uppercase tracking-wider leading-none mt-1">Bulldoze</span>
+              </button>
+
+              {/* Standalone Buy Land Button */}
+              <button
+                onClick={() => {
+                  onToggleBuyLandMode(true);
+                  setActiveCategory(null);
+                }}
+                className={`
+                  relative flex flex-col items-center justify-center rounded-xl border-2 transition-all shadow-lg backdrop-blur-md flex-shrink-0
+                  w-14 h-14 md:w-16 md:h-16 cursor-pointer select-none
+                  ${isBuyLandMode
+                    ? 'border-green-500 bg-green-950/40 scale-105 z-10 font-bold shadow-[0_0_12px_rgba(34,197,94,0.3)]' 
+                    : 'border-slate-800 bg-slate-950/80 hover:bg-slate-900'}
+                `}
+                title="Buy Land Mode: Toggle on to expand your floating island boundary tiles securely. Safe from accidental construction clicks!"
+              >
+                <span className="text-lg md:text-xl">🗺️</span>
+                <span className="text-[7.5px] md:text-[9px] font-bold text-green-400 uppercase tracking-wider leading-none mt-1">Buy Land</span>
               </button>
 
               {/* Loop through Categories */}
@@ -1179,7 +1204,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                     ⚡ <strong className="text-cyan-400 font-medium">Utilities & Services</strong>: Build Water Pumps, Sewage Treatment, and Power Plants to keep shortages at bay. Deficits rapidly drain happiness once population passes the 500 mark.
                   </li>
                   <li>
-                    💵 <strong className="text-cyan-400 font-medium font-bold">Expansion Borders</strong>: Hover or click on locked boundary zones of the 12x12 island and press <span className="text-indigo-400 font-bold">[Enter]</span> to purchase and unlock more territory, maximizing your available building space.
+                    💵 <strong className="text-cyan-400 font-medium font-bold">Expansion Borders</strong>: Enable <span className="text-green-400 font-bold">Buy Land</span> mode in the bottom toolbar, select any locked boundary zone, and press <span className="text-indigo-400 font-bold">[Enter]</span> (or click) to purchase and unlock more territory, maximizing your available building space.
                   </li>
                 </ul>
               </section>

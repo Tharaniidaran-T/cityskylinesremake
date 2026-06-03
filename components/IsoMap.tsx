@@ -1600,6 +1600,91 @@ class CanvasErrorBoundary extends React.Component<
   }
 }
 
+interface DynamicAtmosphereLightingProps {
+  day: number;
+  quality: 'standard' | 'high';
+  alwaysDaytime?: boolean;
+}
+
+const DynamicAtmosphereLighting: React.FC<DynamicAtmosphereLightingProps> = ({ day, quality, alwaysDaytime = false }) => {
+  const isNight = alwaysDaytime ? false : (day % 2 === 0);
+  
+  // Set target light values based on day vs night
+  const targetAmbientIntensity = isNight ? 0.28 : 0.65;
+  const targetHemiIntensity = isNight ? 0.15 : 0.45;
+  const targetDir1Intensity = isNight ? 0.35 : 2.05;
+  const targetDir2Intensity = isNight ? 0.12 : 0.45;
+
+  const ambientRef = useRef<THREE.AmbientLight>(null);
+  const hemiRef = useRef<THREE.HemisphereLight>(null);
+  const dir1Ref = useRef<THREE.DirectionalLight>(null);
+  const dir2Ref = useRef<THREE.DirectionalLight>(null);
+
+  useFrame(() => {
+    // Lerp ambient light
+    if (ambientRef.current) {
+      ambientRef.current.intensity = THREE.MathUtils.lerp(
+        ambientRef.current.intensity,
+        targetAmbientIntensity,
+        0.04
+      );
+    }
+    // Lerp hemisphere light
+    if (hemiRef.current) {
+      hemiRef.current.intensity = THREE.MathUtils.lerp(
+        hemiRef.current.intensity,
+        targetHemiIntensity,
+        0.04
+      );
+    }
+    // Lerp main shadow light
+    if (dir1Ref.current) {
+      dir1Ref.current.intensity = THREE.MathUtils.lerp(
+        dir1Ref.current.intensity,
+        targetDir1Intensity,
+        0.04
+      );
+      // Change color based on day/night
+      const targetColor = isNight ? new THREE.Color("#818cf8") : new THREE.Color("#fffbeb");
+      dir1Ref.current.color.lerp(targetColor, 0.04);
+    }
+    // Lerp secondary fill light
+    if (dir2Ref.current) {
+      dir2Ref.current.intensity = THREE.MathUtils.lerp(
+        dir2Ref.current.intensity,
+        targetDir2Intensity,
+        0.04
+      );
+      const targetColor = isNight ? new THREE.Color("#4338ca") : new THREE.Color("#a5b4fc");
+      dir2Ref.current.color.lerp(targetColor, 0.04);
+    }
+  });
+
+  return (
+    <>
+      <ambientLight ref={ambientRef} intensity={0.6} color="#dbeafe" />
+      <hemisphereLight ref={hemiRef} color="#cceeff" groundColor="#3b82f6" intensity={0.4} />
+      <directionalLight
+        ref={dir1Ref}
+        castShadow
+        position={[15, 20, 10]}
+        intensity={2}
+        color="#fffbeb"
+        shadow-mapSize={quality === 'high' ? [2048, 2048] : [512, 512]}
+        shadow-camera-left={-15} shadow-camera-right={15}
+        shadow-camera-top={15} shadow-camera-bottom={-15}
+        shadow-bias={quality === 'high' ? -0.0005 : -0.001}
+      />
+      <directionalLight
+        ref={dir2Ref}
+        position={[-12, 10, -10]}
+        intensity={0.4}
+        color="#a5b4fc"
+      />
+    </>
+  );
+};
+
 interface IsoMapProps {
   grid: Grid;
   onTileClick: (x: number, y: number) => void;
@@ -1608,9 +1693,23 @@ interface IsoMapProps {
   stats: CityStats;
   quality?: 'standard' | 'high';
   isBuyLandMode: boolean;
+  skyTheme?: 'azure' | 'midnight' | 'sunset' | 'cosmic';
+  autoRotate?: boolean;
+  alwaysDaytime?: boolean;
 }
 
-const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, hoveredTool, population, stats, quality = 'standard', isBuyLandMode }) => {
+const IsoMap: React.FC<IsoMapProps> = ({ 
+  grid, 
+  onTileClick, 
+  hoveredTool, 
+  population, 
+  stats, 
+  quality = 'standard', 
+  isBuyLandMode,
+  skyTheme = 'azure',
+  autoRotate = false,
+  alwaysDaytime = false
+}) => {
   const [hoveredTile, setHoveredTile] = useState<{x: number, y: number} | null>({ x: 5, y: 5 });
 
   const handleHover = useCallback((x: number, y: number) => {
@@ -1682,8 +1781,17 @@ const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, hoveredTool, populat
   
   const previewPos = hoveredTile ? gridToWorld(hoveredTile.x, hoveredTile.y, grid.length) : [0,0,0];
 
+  const isNight = alwaysDaytime ? false : (stats.day % 2 === 0);
+
   return (
-    <div className="absolute inset-0 bg-sky-900 touch-none">
+    <div className={`absolute inset-0 transition-all duration-1000 touch-none ${
+      isNight ? 'bg-[#0b0f19]' : (
+        skyTheme === 'azure' ? 'bg-sky-900' :
+        skyTheme === 'midnight' ? 'bg-slate-950' :
+        skyTheme === 'sunset' ? 'bg-amber-950' :
+        'bg-indigo-950'
+      )
+    }`}>
       <CanvasErrorBoundary>
         <Canvas 
           key={quality}
@@ -1701,26 +1809,11 @@ const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, hoveredTool, populat
             maxPolarAngle={Math.PI / 2.2}
             minPolarAngle={0.1}
             target={[0,-0.5,0]}
+            autoRotate={autoRotate}
+            autoRotateSpeed={0.8}
           />
 
-          <ambientLight intensity={0.6} color="#dbeafe" />
-          <hemisphereLight color="#cceeff" groundColor="#3b82f6" intensity={0.4} />
-          <directionalLight
-            castShadow
-            position={[15, 20, 10]}
-            intensity={2}
-            color="#fffbeb"
-            shadow-mapSize={quality === 'high' ? [2048, 2048] : [512, 512]}
-            shadow-camera-left={-15} shadow-camera-right={15}
-            shadow-camera-top={15} shadow-camera-bottom={-15}
-            shadow-bias={quality === 'high' ? -0.0005 : -0.001}
-          >
-          </directionalLight>
-          <directionalLight
-            position={[-12, 10, -10]}
-            intensity={0.4}
-            color="#a5b4fc"
-          />
+          <DynamicAtmosphereLighting day={stats.day} quality={quality} alwaysDaytime={alwaysDaytime} />
 
         <EnvironmentEffects />
 

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 import React, { useEffect, useRef, useState } from 'react';
-import { BuildingType, CityStats, AIGoal, NewsItem } from '../types';
+import { BuildingType, CityStats, AIGoal, NewsItem, Grid } from '../types';
 import { BUILDINGS, BUILDING_TIERS } from '../constants';
 
 interface UIOverlayProps {
@@ -22,6 +22,18 @@ interface UIOverlayProps {
   onSetQuality: (q: 'standard' | 'high') => void;
   isBuyLandMode: boolean;
   onToggleBuyLandMode: (val: boolean) => void;
+  grid: Grid;
+  onLoadSaveData: (saveData: any) => void;
+  onResetGame: () => void;
+  onToggleAiEnabled: (val: boolean) => void;
+  skyTheme: 'azure' | 'midnight' | 'sunset' | 'cosmic';
+  onSetSkyTheme: (theme: 'azure' | 'midnight' | 'sunset' | 'cosmic') => void;
+  autoRotate: boolean;
+  onToggleAutoRotate: (val: boolean) => void;
+  showControls: boolean;
+  onToggleShowControls: (val: boolean) => void;
+  alwaysDaytime: boolean;
+  onToggleAlwaysDaytime: (val: boolean) => void;
 }
 
 const tools = [
@@ -114,13 +126,45 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
   onSetQuality,
   isBuyLandMode,
   onToggleBuyLandMode,
+  grid,
+  onLoadSaveData,
+  onResetGame,
+  onToggleAiEnabled,
+  skyTheme,
+  onSetSkyTheme,
+  autoRotate,
+  onToggleAutoRotate,
+  showControls,
+  onToggleShowControls,
+  alwaysDaytime,
+  onToggleAlwaysDaytime,
 }) => {
   const newsRef = useRef<HTMLDivElement>(null);
-  const [showFusionGuide, setShowFusionGuide] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showHelpDropdown, setShowHelpDropdown] = useState(false);
+  const [helpPanelTab, setHelpPanelTab] = useState<'controls' | 'fusion'>('controls');
   const [selectedGuideTab, setSelectedGuideTab] = useState<BuildingType>(BuildingType.Residential);
   const [showDashboard, setShowDashboard] = useState(false);
   const [showHelpMenu, setShowHelpMenu] = useState(false);
-  const [dashboardTab, setDashboardTab] = useState<'tax' | 'loans' | 'policies' | 'districts'>('tax');
+  const [showSavesMenu, setShowSavesMenu] = useState(false);
+  const [importedCode, setImportedCode] = useState('');
+  const [saveStatus, setSaveStatus] = useState<{message: string, isError: boolean} | null>(null);
+  const [dashboardTab, setDashboardTab] = useState<'analytics' | 'tax' | 'loans' | 'policies' | 'districts'>('analytics');
+  const [hudCollapsed, setHudCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('skymetropolis-hud-collapsed');
+      return saved === 'true';
+    }
+    return false;
+  });
+
+  const toggleHudCollapsed = () => {
+    setHudCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('skymetropolis-hud-collapsed', String(next));
+      return next;
+    });
+  };
 
   // Categories configurations
   const categories = [
@@ -351,6 +395,132 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
     }
   };
 
+  // --- Save / Load / Copy Code Helpers ---
+  const generateSaveString = () => {
+    const saveData = {
+      version: 1,
+      grid,
+      stats,
+      currentGoal,
+      newsFeed,
+      aiEnabled,
+      gameStarted: true, // If they export it, it should load active
+      timestamp: Date.now()
+    };
+    try {
+      const jsonStr = JSON.stringify(saveData);
+      const b64 = btoa(unescape(encodeURIComponent(jsonStr)));
+      return b64;
+    } catch (e) {
+      console.error("Failed to generate save string", e);
+      return "";
+    }
+  };
+
+  const loadFromSaveString = (code: string) => {
+    try {
+      const trimmed = code.trim();
+      if (!trimmed) {
+        setSaveStatus({ message: "Error: Please enter a valid non-empty save code.", isError: true });
+        return;
+      }
+      const decodedStr = decodeURIComponent(escape(atob(trimmed)));
+      const parsed = JSON.parse(decodedStr);
+      if (!parsed || !parsed.grid || !parsed.stats) {
+        setSaveStatus({ message: "ValidationError: Invalid SkyMetropolis structure. Missing grid or stats.", isError: true });
+        return;
+      }
+      onLoadSaveData(parsed);
+      setSaveStatus({ message: "🎉 System Success! Utopia restored from transfer code. Let's build! 🚀", isError: false });
+      setImportedCode('');
+    } catch (e) {
+      setSaveStatus({ message: "ParsingError: Corrupted transfer code. Make sure you copied the complete line.", isError: true });
+    }
+  };
+
+  const downloadSaveFile = () => {
+    const saveData = {
+      version: 1,
+      grid,
+      stats,
+      currentGoal,
+      newsFeed,
+      aiEnabled,
+      gameStarted: true,
+      timestamp: Date.now()
+    };
+    try {
+      const jsonStr = JSON.stringify(saveData, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `skymetropolis_save_${stats.population}_pop_day_${stats.day}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setSaveStatus({ message: "💾 Save File Exported! Clean file downloaded to your downloads folder.", isError: false });
+    } catch (e) {
+      setSaveStatus({ message: "ExportError: Failed to write JSON save file.", isError: true });
+    }
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const parsed = JSON.parse(content);
+        if (!parsed || !parsed.grid || !parsed.stats) {
+          setSaveStatus({ message: "FileValidationError: Invalid JSON structure. Main variables are absent.", isError: true });
+          return;
+        }
+        onLoadSaveData(parsed);
+        setSaveStatus({ message: "🎉 System Success! Utopia imported from file: " + file.name, isError: false });
+      } catch (err) {
+        setSaveStatus({ message: "FileParsingError: Failed to parse uploaded JSON file.", isError: true });
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const manualBrowserSave = () => {
+    const saveData = {
+      version: 1,
+      grid,
+      stats,
+      currentGoal,
+      newsFeed,
+      aiEnabled,
+      gameStarted: true,
+      timestamp: Date.now()
+    };
+    try {
+      localStorage.setItem('skymetropolis-save', JSON.stringify(saveData));
+      setSaveStatus({ message: "✨ Saved to Browser Slot! Auto-save is actively working.", isError: false });
+    } catch (e) {
+      setSaveStatus({ message: "BrowserSaveError: Local storage write failed.", isError: true });
+    }
+  };
+
+  const manualBrowserLoad = () => {
+    try {
+      const saved = localStorage.getItem('skymetropolis-save');
+      if (!saved) {
+        setSaveStatus({ message: "SlotError: No saved games found in browser slot.", isError: true });
+        return;
+      }
+      const parsed = JSON.parse(saved);
+      onLoadSaveData(parsed);
+      setSaveStatus({ message: "✨ Session loaded! Restored successfully from browser slot.", isError: false });
+    } catch (e) {
+      setSaveStatus({ message: "BrowserLoadError: Failed to read from browser slot.", isError: true });
+    }
+  };
+
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-2 md:p-4 font-sans z-10">
       
@@ -359,153 +529,220 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-2">
           
           {/* Main Dashboard & HUD Indicators */}
-          <div className="bg-gray-950/95 text-white p-2.5 md:p-3 rounded-xl border border-slate-800 shadow-2xl backdrop-blur-md flex flex-wrap gap-2 md:gap-4.5 items-center justify-between pointer-events-auto">
-            {/* Treasury / Day Income */}
-            <div className="flex flex-col">
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-[8px] md:text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none">Treasury</span>
-                <span className={`text-[8.5px] leading-none font-bold font-mono ${stats.netIncome >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  {stats.netIncome >= 0 ? `+$${stats.netIncome}` : `-$${Math.abs(stats.netIncome)}`}/day
-                </span>
-              </div>
-              <span className="text-sm md:text-xl font-black text-green-400 font-mono leading-none mt-0.5">${stats.money.toLocaleString()}</span>
-            </div>
-            
-            <div className="w-px h-6 bg-slate-800 hidden md:block"></div>
-            
-            {/* Citizens & Growth change */}
-            <div className="flex flex-col">
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-[8px] md:text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none font-sans">Citizens</span>
-                <span className={`text-[8.5px] leading-none font-bold font-mono ${stats.popChange >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
-                  {stats.popChange >= 0 ? `+${stats.popChange}` : `${stats.popChange}`}/day
-                </span>
-              </div>
-              <span className="text-xs md:text-base font-bold text-blue-300 font-mono leading-none mt-0.5">{stats.population.toLocaleString()}</span>
-            </div>
-            
-            <div className="w-px h-6 bg-slate-800 hidden md:block"></div>
-
-            {/* Unemployment Rate */}
-            <div className="flex flex-col">
-              <span className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-0.5 font-sans">Unemployment</span>
-              <div className="flex flex-col gap-0.5 mt-0.5">
-                <span className={`text-xs md:text-sm font-bold font-mono leading-none ${stats.unemployment > 12 ? 'text-red-300' : 'text-slate-300'}`}>
-                  {stats.unemployment}%
-                </span>
-                {stats.population > 0 && (
-                  <span className="text-[7px] md:text-[8px] font-mono leading-none text-slate-400">
-                    {Math.max(0, Math.round((stats.population * 0.45) * (stats.unemployment / 100))).toLocaleString()} need job{Math.round((stats.population * 0.45) * (stats.unemployment / 100)) !== 1 ? 's' : ''}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="w-px h-6 bg-slate-800 hidden md:block"></div>
-
-            {/* Happiness index */}
-            <div className="flex flex-col">
-              <span className="text-[8px] md:text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-0.5 font-sans">Happiness</span>
-              <span className={`text-xs md:text-base font-bold font-mono leading-none ${getRatingColor(stats.happiness)}`}>
-                {getHappinessFace(stats.happiness)} {stats.happiness}%
-              </span>
-            </div>
-            
-            <div className="w-px h-6 bg-slate-800 hidden pr-1 md:block"></div>
-
-            {/* Traffic Flow */}
-            <div className="flex flex-col">
-              <span className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-0.5 font-sans">Traffic</span>
-              <span className={`text-xs md:text-sm font-bold font-mono leading-none ${stats.traffic >= 80 ? 'text-green-400' : stats.traffic >= 65 ? 'text-yellow-400' : 'text-red-400'}`}>
-                {stats.traffic}%
-              </span>
-            </div>
-
-            <div className="w-px h-6 bg-slate-800 hidden md:block"></div>
-
-            {/* Land value index */}
-            <div className="flex flex-col">
-              <span className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-0.5 font-sans">Land Value</span>
-              <span className="text-xs md:text-sm font-bold text-emerald-400 font-mono leading-none">
-                ${stats.landValue}/m²
-              </span>
-            </div>
-
-            <div className="w-px h-6 bg-slate-800 hidden md:block"></div>
-
-            {/* Micro Demand Bars (🟩 🟦 🟨) */}
-            <div className="flex flex-col items-start gap-1 justify-center">
-              <span className="text-[7.2px] text-slate-500 font-bold uppercase tracking-wider leading-none">Demand</span>
-              <div className="flex items-center gap-1.5 h-6">
-                <div className="flex items-center gap-0.5 h-full">
-                  {/* Residential (Green) */}
-                  <div className="w-1.5 h-full bg-slate-800 rounded-sm relative overflow-hidden flex flex-col justify-end" title={`Residential: ${stats.demandRes}%`}>
-                    <div className="w-full bg-green-500 rounded-sm transition-all duration-500" style={{ height: `${stats.demandRes}%` }}></div>
-                  </div>
-                  {/* Commercial (Blue) */}
-                  <div className="w-1.5 h-full bg-slate-800 rounded-sm relative overflow-hidden flex flex-col justify-end" title={`Commercial: ${stats.demandCom}%`}>
-                    <div className="w-full bg-blue-500 rounded-sm transition-all duration-400" style={{ height: `${stats.demandCom}%` }}></div>
-                  </div>
-                  {/* Industrial (Yellow) */}
-                  <div className="w-1.5 h-full bg-slate-800 rounded-sm relative overflow-hidden flex flex-col justify-end" title={`Industrial: ${stats.demandInd}%`}>
-                    <div className="w-full bg-amber-400 rounded-sm transition-all duration-400" style={{ height: `${stats.demandInd}%` }}></div>
-                  </div>
-                </div>
-                {/* Actual demand values */}
-                <div className="flex flex-col text-[7px] md:text-[8px] font-mono leading-none text-slate-300">
-                  <span className="text-green-400 font-bold">R:{stats.demandRes}%</span>
-                  <span className="text-blue-400 font-bold">C:{stats.demandCom}%</span>
-                  <span className="text-amber-400 font-bold">I:{stats.demandInd}%</span>
-                </div>
-                {/* Help Button */}
-                <button
-                  onClick={() => setShowHelpMenu(true)}
-                  className="w-4 h-4 rounded-full bg-slate-800 hover:bg-slate-700 hover:border-indigo-400 border border-slate-700 flex items-center justify-center text-[10px] text-slate-300 font-mono font-bold hover:text-white transition-all cursor-pointer pointer-events-auto shadow-sm"
-                  title="Explain RCI demand and other systems (?)"
-                >
-                  ?
-                </button>
-              </div>
-            </div>
-
-            <div className="w-px h-6 bg-slate-800 hidden md:block"></div>
-
-            {/* Day index */}
-            <div className="flex flex-col items-end pr-1">
-              <span className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none">Day</span>
-              <span className="text-xs md:text-sm font-bold text-white font-mono leading-none">{stats.day}</span>
-            </div>
-
-            <div className="w-px h-6 bg-slate-800 hidden md:block"></div>
-
-            {/* Graphics Quality Control Toggle */}
-            <div className="flex items-center gap-1 bg-slate-900 border border-slate-800/80 px-2 py-1 rounded-lg">
-              <span className="text-[7.2px] text-slate-400 font-bold uppercase tracking-widest leading-none font-sans">RESO</span>
+          {!hudCollapsed ? (
+            <div className="bg-gray-950/95 text-white p-2.5 md:p-3 rounded-xl border border-slate-800 shadow-2xl backdrop-blur-md flex flex-wrap gap-2 md:gap-4.5 items-center justify-between pointer-events-auto">
+              
+              {/* Collapse to Side trigger */}
               <button
-                onClick={() => onSetQuality(quality === 'high' ? 'standard' : 'high')}
-                className={`py-0.5 px-1.5 rounded font-black text-[9px] uppercase transition-all select-none cursor-pointer border flex items-center gap-1
-                  ${quality === 'high' 
-                    ? 'bg-indigo-600 hover:bg-indigo-500 border-indigo-400 text-white shadow-[0_0_8px_rgba(99,102,241,0.3)]' 
-                    : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-400'}`}
-                title={quality === 'high' ? "High Quality: Crisp high DPI, soft realistic shadows, and anti-aliasing" : "Standard Quality: Faster performance, standard shadows"}
+                onClick={toggleHudCollapsed}
+                className="p-1 px-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/50 rounded font-black uppercase text-[8px] md:text-[9.5px] leading-tight text-cyan-400 cursor-pointer active:scale-95 transition-all flex items-center gap-0.5 mr-0.5"
+                title="Collapse HUD indicators to side pill"
               >
-                <span>{quality === 'high' ? '✨ HIGH' : '⚡ STD'}</span>
+                ◀ Coll
+              </button>
+
+              <div className="w-px h-6 bg-slate-800 hidden md:block"></div>
+
+              {/* Treasury / Day Income */}
+              <div className="flex flex-col">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-[8px] md:text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none">Treasury</span>
+                  <span className={`text-[8.5px] leading-none font-bold font-mono ${stats.netIncome >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {stats.netIncome >= 0 ? `+$${stats.netIncome}` : `-$${Math.abs(stats.netIncome)}`}/day
+                  </span>
+                </div>
+                <span className="text-sm md:text-xl font-black text-green-400 font-mono leading-none mt-0.5">${stats.money.toLocaleString()}</span>
+              </div>
+              
+              <div className="w-px h-6 bg-slate-800 hidden md:block"></div>
+              
+              {/* Citizens & Growth change */}
+              <div className="flex flex-col">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-[8px] md:text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none font-sans">Citizens</span>
+                  <span className={`text-[8.5px] leading-none font-bold font-mono ${stats.popChange >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
+                    {stats.popChange >= 0 ? `+${stats.popChange}` : `${stats.popChange}`}/day
+                  </span>
+                </div>
+                <span className="text-xs md:text-base font-bold text-blue-300 font-mono leading-none mt-0.5">{stats.population.toLocaleString()}</span>
+              </div>
+              
+              <div className="w-px h-6 bg-slate-800 hidden md:block"></div>
+
+              {/* Unemployment Rate */}
+              <div className="flex flex-col">
+                <span className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-0.5 font-sans">Unemployment</span>
+                <div className="flex flex-col gap-0.5 mt-0.5">
+                  <span className={`text-xs md:text-sm font-bold font-mono leading-none ${stats.unemployment > 12 ? 'text-red-300' : 'text-slate-300'}`}>
+                    {stats.unemployment}%
+                  </span>
+                  {stats.population > 0 && (
+                    <span className="text-[7px] md:text-[8px] font-mono leading-none text-slate-400">
+                      {Math.max(0, Math.round((stats.population * 0.45) * (stats.unemployment / 100))).toLocaleString()} need job{Math.round((stats.population * 0.45) * (stats.unemployment / 100)) !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="w-px h-6 bg-slate-800 hidden md:block"></div>
+
+              {/* Happiness index */}
+              <div className="flex flex-col">
+                <span className="text-[8px] md:text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-0.5 font-sans">Happiness</span>
+                <span className={`text-xs md:text-base font-bold font-mono leading-none ${getRatingColor(stats.happiness)}`}>
+                  {getHappinessFace(stats.happiness)} {stats.happiness}%
+                </span>
+              </div>
+              
+              <div className="w-px h-6 bg-slate-800 hidden pr-1 md:block"></div>
+
+              {/* Traffic Flow */}
+              <div className="flex flex-col">
+                <span className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-0.5 font-sans">Traffic</span>
+                <span className={`text-xs md:text-sm font-bold font-mono leading-none ${stats.traffic >= 80 ? 'text-green-400' : stats.traffic >= 65 ? 'text-yellow-400' : 'text-red-400'}`}>
+                  {stats.traffic}%
+                </span>
+              </div>
+
+              <div className="w-px h-6 bg-slate-800 hidden md:block"></div>
+
+              {/* Land value index */}
+              <div className="flex flex-col">
+                <span className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-0.5 font-sans">Land Value</span>
+                <span className="text-xs md:text-sm font-bold text-emerald-400 font-mono leading-none">
+                  ${stats.landValue}/m²
+                </span>
+              </div>
+
+              <div className="w-px h-6 bg-slate-800 hidden md:block"></div>
+
+              {/* Micro Demand Bars (🟩 🟦 🟨) */}
+              <div className="flex flex-col items-start gap-1 justify-center">
+                <span className="text-[7.2px] text-slate-500 font-bold uppercase tracking-wider leading-none">Demand</span>
+                <div className="flex items-center gap-1.5 h-6">
+                  <div className="flex items-center gap-0.5 h-full">
+                    {/* Residential (Green) */}
+                    <div className="w-1.5 h-full bg-slate-800 rounded-sm relative overflow-hidden flex flex-col justify-end" title={`Residential: ${stats.demandRes}%`}>
+                      <div className="w-full bg-green-500 rounded-sm transition-all duration-500" style={{ height: `${stats.demandRes}%` }}></div>
+                    </div>
+                    {/* Commercial (Blue) */}
+                    <div className="w-1.5 h-full bg-slate-800 rounded-sm relative overflow-hidden flex flex-col justify-end" title={`Commercial: ${stats.demandCom}%`}>
+                      <div className="w-full bg-blue-500 rounded-sm transition-all duration-400" style={{ height: `${stats.demandCom}%` }}></div>
+                    </div>
+                    {/* Industrial (Yellow) */}
+                    <div className="w-1.5 h-full bg-slate-800 rounded-sm relative overflow-hidden flex flex-col justify-end" title={`Industrial: ${stats.demandInd}%`}>
+                      <div className="w-full bg-amber-400 rounded-sm transition-all duration-400" style={{ height: `${stats.demandInd}%` }}></div>
+                    </div>
+                  </div>
+                  {/* Actual demand values */}
+                  <div className="flex flex-col text-[7px] md:text-[8px] font-mono leading-none text-slate-300">
+                    <span className="text-green-400 font-bold">R:{stats.demandRes}%</span>
+                    <span className="text-blue-400 font-bold">C:{stats.demandCom}%</span>
+                    <span className="text-amber-400 font-bold">I:{stats.demandInd}%</span>
+                  </div>
+                  {/* Help Button */}
+                  <button
+                    onClick={() => setShowHelpMenu(true)}
+                    className="w-4 h-4 rounded-full bg-slate-800 hover:bg-slate-700 hover:border-indigo-400 border border-slate-700 flex items-center justify-center text-[10px] text-slate-300 font-mono font-bold hover:text-white transition-all cursor-pointer pointer-events-auto shadow-sm"
+                    title="Explain RCI demand and other systems (?)"
+                  >
+                    ?
+                  </button>
+                </div>
+              </div>
+
+              <div className="w-px h-6 bg-slate-800 hidden md:block"></div>
+
+              {/* Day index */}
+              <div className="flex flex-col items-end pr-1">
+                <span className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none">Day</span>
+                <span className="text-xs md:text-sm font-bold text-white font-mono leading-none">{stats.day}</span>
+              </div>
+
+              <div className="w-px h-6 bg-slate-800 hidden md:block font-sans"></div>
+
+              {/* Unified Settings Option Panel */}
+              <button
+                onClick={() => {
+                  setShowSavesMenu(true);
+                  setShowDashboard(false);
+                  setShowHelpDropdown(false);
+                  setSaveStatus(null);
+                }}
+                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 hover:text-emerald-300 text-white rounded font-bold uppercase text-[9px] md:text-[10px] tracking-wide transition-all select-none cursor-pointer flex items-center gap-1 active:scale-95 shadow-md border border-slate-700"
+              >
+                ⚙️ Settings
+              </button>
+
+              <div className="w-px h-6 bg-slate-800 hidden md:block"></div>
+
+              {/* Dashboard Opener Button */}
+              <button
+                onClick={() => {
+                  setShowDashboard(prev => !prev);
+                  setShowHelpDropdown(false);
+                  setShowSavesMenu(false);
+                }}
+                className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold uppercase text-[9px] md:text-[10px] tracking-wide transition-all select-none cursor-pointer"
+              >
+                💼 City Hall Dashboard {showDashboard ? '✕' : '▲'}
               </button>
             </div>
+          ) : (
+            <div className="flex items-center gap-2 pointer-events-auto animate-fade-in bg-gray-950/95 p-2 rounded-xl border border-slate-800 shadow-xl backdrop-blur-md">
+              <button
+                onClick={toggleHudCollapsed}
+                className="px-2 py-1 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:scale-105 text-white rounded font-bold uppercase text-[9px] md:text-[10px] tracking-wide transition-all select-none cursor-pointer flex items-center gap-1.5 active:scale-95 shadow-md font-mono"
+                title="Expand stats panel"
+              >
+                ▶ <span className="text-[11px]">📊</span> <span className="font-sans">SYS HUD</span>
+              </button>
+              
+              <div className="w-px h-5 bg-slate-800"></div>
 
-            <div className="w-px h-6 bg-slate-800 hidden md:block"></div>
+              {/* Mini Indicators */}
+              <div className="flex items-center gap-2.5 px-0.5 md:px-1.5">
+                <div className="flex flex-col text-left">
+                  <span className="text-[7.2px] text-slate-400 font-bold uppercase leading-none">Cash</span>
+                  <span className="text-[11.5px] font-black text-green-400 font-mono leading-none mt-0.5">${stats.money.toLocaleString()}</span>
+                </div>
+                <div className="flex flex-col text-left">
+                  <span className="text-[7.2px] text-slate-400 font-bold uppercase leading-none font-sans">Pop</span>
+                  <span className="text-[11px] font-bold text-blue-300 font-mono leading-none mt-0.5">{stats.population.toLocaleString()}</span>
+                </div>
+                <div className="flex flex-col text-left">
+                  <span className="text-[7.2px] text-slate-400 font-bold uppercase leading-none font-sans">Happy</span>
+                  <span className="text-[11px] font-bold text-amber-300 font-mono leading-none mt-0.5">😊 {stats.happiness}%</span>
+                </div>
+              </div>
 
-            {/* Dashboard Opener Button */}
-            <button
-              onClick={() => {
-                setShowDashboard(prev => !prev);
-                setShowFusionGuide(false);
-              }}
-              className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold uppercase text-[9px] md:text-[10px] tracking-wide transition-all select-none cursor-pointer"
-            >
-              💼 City Hall Dashboard {showDashboard ? '✕' : '▲'}
-            </button>
-          </div>
+              <div className="w-px h-5 bg-slate-800"></div>
+
+              <button
+                onClick={() => {
+                  setShowDashboard(prev => !prev);
+                  setShowHelpDropdown(false);
+                  setShowSavesMenu(false);
+                }}
+                className="px-2 py-1 bg-slate-850 hover:bg-slate-750 font-bold uppercase text-[9px] text-indigo-300 rounded border border-slate-700 cursor-pointer"
+              >
+                Dashboard
+              </button>
+              
+              <button
+                onClick={() => {
+                  setShowSavesMenu(true);
+                  setShowDashboard(false);
+                  setShowHelpDropdown(false);
+                  setSaveStatus(null);
+                }}
+                className="p-1 bg-slate-850 hover:bg-slate-750 font-bold rounded border border-slate-700 cursor-pointer"
+                title="Settings"
+              >
+                ⚙️
+              </button>
+            </div>
+          )}
 
         </div>
 
@@ -521,6 +758,154 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
             >
               Exit Painting
             </button>
+          </div>
+        )}
+      </div>
+
+      {/* Floating Top-Left Unified "?" Guide and Controls panel */}
+      <div className="absolute left-2 md:left-4 top-[84px] md:top-[88px] pointer-events-auto flex flex-col items-start gap-2 z-40">
+        <button
+          onClick={() => {
+            setShowHelpDropdown(v => !v);
+            setShowDashboard(false);
+            setShowSavesMenu(false);
+          }}
+          className="w-10 h-10 rounded-xl bg-slate-950/95 text-white border border-indigo-500/50 hover:bg-slate-900 font-extrabold flex items-center justify-center shadow-[0_0_15px_rgba(99,102,241,0.25)] hover:scale-105 transition-all text-sm uppercase tracking-wider backdrop-blur-md cursor-pointer select-none"
+          title="Utopia Registry Guide & Controls (?)"
+        >
+          <span className="text-indigo-400 font-black text-lg">?</span>
+        </button>
+
+        {showHelpDropdown && (
+          <div className="w-80 md:w-96 bg-slate-950/95 border border-indigo-500/40 rounded-2xl shadow-2xl backdrop-blur-xl overflow-hidden p-3 text-white flex flex-col gap-2.5 animate-fade-in">
+            {/* Header */}
+            <div className="flex justify-between items-center border-b border-slate-800 pb-1.5">
+              <span className="font-extrabold text-[10px] md:text-xs tracking-wide bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent uppercase font-mono">
+                ❓ Utopia Registry & Guide
+              </span>
+              <button 
+                onClick={() => setShowHelpDropdown(false)} 
+                className="text-slate-400 hover:text-white font-bold text-xs p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Toggle Tabs */}
+            <div className="grid grid-cols-2 gap-1.5 bg-slate-900 border border-slate-800 p-1 rounded-xl">
+              <button
+                onClick={() => setHelpPanelTab('controls')}
+                className={`py-1 text-[9px] font-bold uppercase rounded-lg border transition-all cursor-pointer select-none text-center
+                  ${helpPanelTab === 'controls' 
+                    ? 'border-indigo-500 bg-indigo-500/10 text-indigo-300 shadow' 
+                    : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+              >
+                🎮 Keyboard Controls
+              </button>
+              <button
+                onClick={() => setHelpPanelTab('fusion')}
+                className={`py-1 text-[9px] font-bold uppercase rounded-lg border transition-all cursor-pointer select-none text-center
+                  ${helpPanelTab === 'fusion' 
+                    ? 'border-indigo-500 bg-indigo-500/10 text-indigo-300 shadow' 
+                    : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+              >
+                ✨ Fusion Registry
+              </button>
+            </div>
+
+            {/* Tab 1: Keyboard Controls */}
+            {helpPanelTab === 'controls' && (
+              <div className="flex flex-col gap-2 font-mono text-[9px] md:text-[10px] leading-relaxed text-slate-300">
+                <div className="bg-indigo-950/20 border border-indigo-800/30 p-2.5 rounded-lg">
+                  <p className="font-extrabold text-indigo-300 uppercase tracking-wide text-[10px] mb-2 border-b border-indigo-900/40 pb-1">Primary Navigation Controls</p>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-slate-400">Navigate Selection:</span>
+                      <div className="flex gap-1">
+                        <span className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-[8px] font-bold text-slate-200 select-all">[W][A][S][D]</span>
+                        <span className="text-slate-500">or</span>
+                        <span className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-[8px] font-bold text-slate-200 select-all">[Arrows]</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-slate-400">Build / Manual Fusion:</span>
+                      <span className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-[8px] font-bold text-slate-200">[Enter]</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-slate-400">Mouse Interaction:</span>
+                      <span className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-[8px] font-bold text-slate-200">Click Tile</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-slate-900/60 p-2.5 rounded-lg text-slate-400 text-[8.5px] leading-snug">
+                  💡 <strong className="text-amber-400 font-semibold font-sans">Pro Tip:</strong> Hover a tier or building tool, select a pre-existing construction, then press <kbd className="text-white font-bold bg-slate-800 px-1 rounded">[Enter]</kbd> to manually stack upgrade and trigger hyper-building merges instantly!
+                </div>
+              </div>
+            )}
+
+            {/* Tab 2: Fusion Registry (from previous Building Merge Guide) */}
+            {helpPanelTab === 'fusion' && (
+              <>
+                {/* Instruction block */}
+                <div className="bg-cyan-950/20 border border-cyan-800/30 p-2 rounded-lg text-[9px] md:text-[10px] leading-relaxed text-cyan-200/90 font-mono">
+                  <p className="font-bold text-cyan-300 mb-0.5">Fusion Mechanics:</p>
+                  <ul className="list-disc pl-3.5 space-y-0.5 select-none text-[8px] md:text-[9.5px]">
+                    <li><strong className="text-white">Stack Upgrade & Merge</strong>: Select an existing building and select its matching construction tool, then press <span className="text-indigo-400 font-bold">[Enter]</span> to manually upgrade and merge to the next higher tier!</li>
+                  </ul>
+                </div>
+
+                {/* Sub-tabs */}
+                <div className="flex gap-1 border-b border-slate-900 pb-1.5 overflow-x-auto no-scrollbar">
+                  {guideTabs.map((type) => {
+                    const config = BUILDINGS[type];
+                    return (
+                      <button
+                        key={type}
+                        onClick={() => setSelectedGuideTab(type)}
+                        className={`px-1.5 py-0.5 rounded text-[8.5px] md:text-[9px] font-bold uppercase transition-all flex-shrink-0 cursor-pointer
+                          ${selectedGuideTab === type 
+                            ? 'bg-cyan-500 text-black shadow-md shadow-cyan-500/20' 
+                            : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800'
+                          }`}
+                      >
+                        {config.name}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Tiers List */}
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 no-scrollbar select-none">
+                  {[1, 2, 3, 4].map((lvl) => {
+                    const tier = BUILDING_TIERS[selectedGuideTab]?.[lvl];
+                    if (!tier) return null;
+                    return (
+                      <div key={lvl} className="flex gap-2 items-start p-1.5 rounded-lg bg-slate-900/50 border border-slate-800/80 text-[10px]">
+                        {/* Badge */}
+                        <div className="flex-shrink-0 w-7 h-7 md:w-8 h-8 rounded border border-white/20 flex flex-col justify-center items-center font-mono font-black" style={{ backgroundColor: tier.color }}>
+                          <span className="text-[8px] text-black">Lvl</span>
+                          <span className="text-[10px] text-black -mt-1">{lvl}</span>
+                        </div>
+
+                        {/* Metadata */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-baseline gap-1">
+                            <span className="font-extrabold text-[10px] md:text-[11px] text-white truncate">{tier.name}</span>
+                            <div className="font-mono text-[8px] text-slate-400 font-bold whitespace-nowrap">
+                              {tier.incomeGen > 0 && <span className="text-green-400">+${tier.incomeGen}/d</span>}
+                              {tier.incomeGen < 0 && <span className="text-red-400">-${Math.abs(tier.incomeGen)}/d</span>}
+                              {tier.popGen > 0 && <span className="text-blue-300 ml-1">+{tier.popGen}p/d</span>}
+                            </div>
+                          </div>
+                          <p className="text-[8.5px] md:text-[9.5px] text-slate-400 leading-tight mt-0.5">{tier.description}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -549,15 +934,16 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
 
           {/* Sub Navbar */}
           <div className="flex border-b border-slate-900 pb-2 overflow-x-auto no-scrollbar gap-1">
-            {(['tax', 'loans', 'policies', 'districts'] as const).map(tab => (
+            {(['analytics', 'tax', 'loans', 'policies', 'districts'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setDashboardTab(tab)}
                 className={`px-3 py-1.5 rounded-lg text-[9.5px] md:text-[11px] font-bold uppercase tracking-wide cursor-pointer transition-all flex-shrink-0
                   ${dashboardTab === tab 
-                    ? 'bg-indigo-600 text-white' 
+                    ? 'bg-indigo-600 text-white shadow-[0_0_8px_rgba(99,102,241,0.3)]' 
                     : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800'}`}
               >
+                {tab === 'analytics' && '📊 Citizen Needs'}
                 {tab === 'tax' && '💰 Taxes & Budget'}
                 {tab === 'loans' && '🏦 Banking & Bonds'}
                 {tab === 'policies' && '📜 City Policies'}
@@ -565,6 +951,138 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
               </button>
             ))}
           </div>
+
+          {/* Tab 0: Citizens' Needs Analytics */}
+          {dashboardTab === 'analytics' && (
+            <div className="flex flex-col gap-3 py-1 animate-fade-in max-h-[50vh] overflow-y-auto pr-1 no-scrollbar select-none text-left">
+              
+              {/* Overall Happiness & Summary */}
+              <div className="bg-gradient-to-r from-slate-900 to-indigo-950 p-2.5 rounded-xl border border-indigo-500/20 text-[10.5px] md:text-xs">
+                <span className="text-indigo-400 font-extrabold uppercase font-mono tracking-wider text-[8.5px] block mb-1">Utopia Satisfaction Analytics</span>
+                <div>
+                  <h3 className="text-xs md:text-sm font-bold text-white mb-0.5">Overall Happiness: <span className={getRatingColor(stats.happiness)}>{getHappinessFace(stats.happiness)} {stats.happiness}%</span></h3>
+                  <p className="leading-snug text-slate-300">
+                    We model daily metrics based on resource availability, service coverage, employment rates, and taxes. Provide adequate zoning and services to increase growth.
+                  </p>
+                </div>
+              </div>
+
+              {/* Priority Action Items block */}
+              {(() => {
+                const alerts: { text: string; urgent: boolean }[] = [];
+                if (stats.ratingElectricity < 80) alerts.push({ text: "⚡ Electricity capacity is low! Install Power Plants or Wind Turbines to restore operations.", urgent: true });
+                if (stats.ratingWater < 80) alerts.push({ text: "💧 Water shortages tracked. Build additional Water Pumps immediately.", urgent: true });
+                if (stats.ratingSewage < 80) alerts.push({ text: "🌊 Sewage backups detected. Build more Sewage Treatment plants.", urgent: true });
+                if (stats.ratingHeating < 80) alerts.push({ text: "🔥 Heating grid is shrouded in cosmic frost. Expand Heating Systems.", urgent: true });
+                if (stats.ratingServices < 80) alerts.push({ text: "🚓 Emergency services (Police & Fire & Medical) coverage gaps. Expand station buildings.", urgent: true });
+                if (stats.unemployment > 15) alerts.push({ text: "💼 High Unemployment! Residents are idle. Build Commercial or Industrial zones to expand jobs.", urgent: false });
+                if (stats.traffic < 70) alerts.push({ text: "🛣️ Traffic gridlock in central transit sectors. Boost transit networks.", urgent: false });
+
+                return (
+                  <div className="bg-slate-900 border border-slate-850 p-2 rounded-xl text-[10.5px]">
+                    <span className="text-slate-500 uppercase font-mono font-bold text-[8px] block mb-1.5">📢 Mayor's Urgent Advisory List</span>
+                    {alerts.length === 0 ? (
+                      <div className="flex items-center gap-1.5 text-green-400 font-mono font-bold text-[8.5px] md:text-[9.5px]">
+                        <span>🟢</span>
+                        <span>Perfect Harmony! All citizen needs are satisfied. Your expansion operates at maximum structural stability.</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        {alerts.map((alert, i) => (
+                          <div key={i} className={`p-1.5 rounded text-[8.5px] md:text-[9.5px] font-mono leading-tight flex items-start gap-1.5 ${alert.urgent ? 'bg-red-950/20 border border-red-900/30 text-red-300' : 'bg-amber-950/20 border border-amber-900/30 text-amber-300'}`}>
+                            <span className="mt-0.5">{alert.urgent ? '🚨' : '⚠️'}</span>
+                            <span>{alert.text}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Interactive Citizen Needs Indicators Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[10.5px]">
+                {[
+                  {
+                    name: "Power & Electricity Grid",
+                    val: stats.ratingElectricity,
+                    desc: "Sustains factories, shops, heating arrays, and dwellings.",
+                    icon: "⚡",
+                    rec: "Build: Utility > Power/Wind/Solar"
+                  },
+                  {
+                    name: "Municipal Water Works",
+                    val: stats.ratingWater,
+                    desc: "Critical resource. Suppresses dehydration and sustains crops.",
+                    icon: "💧",
+                    rec: "Build: Utility > Water Pump"
+                  },
+                  {
+                    name: "Sewage Bio-Filtration",
+                    val: stats.ratingSewage,
+                    desc: "Eliminates contamination and disease vectors from the grid.",
+                    icon: "🌊",
+                    rec: "Build: Utility > Sewage Treatment"
+                  },
+                  {
+                    name: "Geothermal Heat Grids",
+                    val: stats.ratingHeating,
+                    desc: "Guards buildings against chilling sub-zero altitude freeze.",
+                    icon: "🔥",
+                    rec: "Build: Utility > Heating System"
+                  },
+                  {
+                    name: "Emergency civil coverage",
+                    val: stats.ratingServices,
+                    desc: "Safety response times (Schools, Police, Fire, Hospitals).",
+                    icon: "🚓",
+                    rec: "Build: Services > School/Police/Fire/Hospital"
+                  },
+                  {
+                    name: "Commercial Transport Flow",
+                    val: stats.traffic,
+                    desc: "Measures gridlock density on elevated infrastructure networks.",
+                    icon: "🛣️",
+                    rec: "Build more Roads or toggle Transit policies"
+                  },
+                  {
+                    name: "Resident Job Market",
+                    val: Math.max(0, 100 - stats.unemployment),
+                    desc: "Measures citizens employed successfully in local zone jobs.",
+                    icon: "💼",
+                    rec: "Build: Commercial, Industrial, or Offices"
+                  }
+                ].map((need, index) => {
+                  const percentColor = need.val >= 85 ? 'text-green-400' : need.val >= 60 ? 'text-yellow-400' : 'text-red-400';
+                  const barBgColor = need.val >= 85 ? 'bg-green-500' : need.val >= 60 ? 'bg-yellow-400' : 'bg-red-500';
+
+                  return (
+                    <div key={index} className="bg-slate-900 border border-slate-850 p-2 rounded-xl flex flex-col gap-1.5 hover:border-indigo-500/30 transition-all text-left">
+                      <div className="flex justify-between items-center">
+                        <span className="font-extrabold text-[9.5px] md:text-[10px] text-white flex items-center gap-1 leading-none">
+                          <span>{need.icon}</span> {need.name}
+                        </span>
+                        <span className={`font-mono font-bold text-[9.5px] ${percentColor} leading-none`}>{need.val}%</span>
+                      </div>
+                      
+                      {/* Slim dynamic progress bar */}
+                      <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+                        <div className={`h-full ${barBgColor} rounded-full transition-all duration-700`} style={{ width: `${need.val}%` }}></div>
+                      </div>
+
+                      <p className="text-[8px] md:text-[8.5px] leading-snug text-slate-400 font-sans">{need.desc}</p>
+                      
+                      <div className="bg-slate-950/50 px-1.5 py-0.5 rounded text-[7.5px] font-mono text-indigo-400 flex justify-between items-baseline select-none text-left">
+                        <span>Recom:</span>
+                        <span className="font-semibold">{need.rec}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+            </div>
+          )}
 
           {/* Tab 1: Taxes & Budgets */}
           {dashboardTab === 'tax' && (
@@ -778,17 +1296,6 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         
         {/* Toolbar - Responsive horizontal layout */}
         <div className="flex flex-col gap-2 w-full lg:w-auto">
-          {/* Floating Controls Overlay */}
-          <div className="bg-slate-950/95 border border-indigo-500/35 p-2 px-3 rounded-xl text-[9px] md:text-[10px] leading-snug text-indigo-200 shadow-xl font-mono flex items-center gap-2 max-w-full select-none backdrop-blur-md self-start pointer-events-auto">
-            <span className="text-sm">⌨️</span>
-            <div>
-              <strong className="text-indigo-400 font-sans uppercase tracking-wider block text-[8px] md:text-[9px]">Controls Panel (Keyboard + Mouse)</strong>
-              <div className="opacity-95 text-slate-300">
-                <span className="text-amber-400 font-bold">[W][A][S][D] / Arrows</span> to navigate grid selection | <span className="text-green-400 font-bold">[Enter]</span> to build/merge (or purchase in 'Buy Land' mode) | <span className="text-indigo-400 font-bold">Click</span> tile to select
-              </div>
-            </div>
-          </div>
-
           {/* Detailed Drop-up options construct drawer representing categories (Road, Residential, etc.) */}
           {activeCategory && (() => {
             const cat = categories.find(c => c.id === activeCategory);
@@ -1019,95 +1526,6 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         </div>
 
       </div>
-      
-      {/* Dynamic Building Fusion Registry Guide */}
-      <div className="absolute left-2 md:left-4 bottom-20 md:bottom-24 pointer-events-auto flex flex-col items-start gap-2 z-30">
-        <button
-          onClick={() => {
-            setShowFusionGuide(prev => !prev);
-            setShowDashboard(false);
-          }}
-          className="bg-slate-950/90 text-white border border-cyan-500/50 hover:bg-slate-900 font-bold px-2.5 py-1.5 rounded-xl shadow-[0_0_15px_rgba(6,182,212,0.25)] hover:scale-105 transition-all text-[9.5px] md:text-xs uppercase tracking-wider flex items-center gap-1 backdrop-blur-md cursor-pointer select-none"
-        >
-          <span className="text-cyan-400 animate-pulse font-bold">✨</span>
-          <span>Building Merge Guide {showFusionGuide ? '▲' : '▼'}</span>
-        </button>
-
-        {showFusionGuide && (
-          <div className="w-80 md:w-96 bg-slate-950/95 border border-cyan-500/40 rounded-2xl shadow-2xl backdrop-blur-xl overflow-hidden p-3 text-white flex flex-col gap-2 animate-fade-in">
-            {/* Header */}
-            <div className="flex justify-between items-center border-b border-slate-800 pb-1.5">
-              <span className="font-extrabold text-[11px] md:text-xs tracking-wide bg-gradient-to-r from-cyan-400 to-indigo-400 bg-clip-text text-transparent uppercase font-mono">
-                ✨ Building Fusion Registry
-              </span>
-              <button 
-                onClick={() => setShowFusionGuide(false)} 
-                className="text-slate-400 hover:text-white font-bold text-xs p-1 cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Instruction block */}
-            <div className="bg-cyan-950/20 border border-cyan-800/30 p-2 rounded-lg text-[9px] md:text-[10px] leading-relaxed text-cyan-200/90 font-mono">
-              <p className="font-bold text-cyan-300 mb-0.5">Fusion Mechanics:</p>
-              <ul className="list-disc pl-3.5 space-y-0.5 select-none text-[8px] md:text-[9.5px]">
-                <li><strong className="text-white">Stack Upgrade & Merge</strong>: Select an existing building and select its matching construction tool, then press <span className="text-indigo-400 font-bold">[Enter]</span> to manually upgrade and merge to the next higher tier!</li>
-              </ul>
-            </div>
-
-            {/* Sub-tabs */}
-            <div className="flex gap-1 border-b border-slate-900 pb-1.5 overflow-x-auto no-scrollbar">
-              {guideTabs.map((type) => {
-                const config = BUILDINGS[type];
-                return (
-                  <button
-                    key={type}
-                    onClick={() => setSelectedGuideTab(type)}
-                    className={`px-1.5 py-0.5 rounded text-[8.5px] md:text-[9px] font-bold uppercase transition-all flex-shrink-0 cursor-pointer
-                      ${selectedGuideTab === type 
-                        ? 'bg-cyan-500 text-black shadow-md shadow-cyan-500/20' 
-                        : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800'
-                      }`}
-                  >
-                    {config.name}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Tiers List */}
-            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 no-scrollbar select-none">
-              {[1, 2, 3, 4].map((lvl) => {
-                const tier = BUILDING_TIERS[selectedGuideTab]?.[lvl];
-                if (!tier) return null;
-                return (
-                  <div key={lvl} className="flex gap-2 items-start p-1.5 rounded-lg bg-slate-900/50 border border-slate-800/80 text-[10px]">
-                    {/* Badge */}
-                    <div className="flex-shrink-0 w-7 h-7 md:w-8 h-8 rounded border border-white/20 flex flex-col justify-center items-center font-mono font-black" style={{ backgroundColor: tier.color }}>
-                      <span className="text-[8px] text-black">Lvl</span>
-                      <span className="text-[10px] text-black -mt-1">{lvl}</span>
-                    </div>
-
-                    {/* Metadata */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-baseline gap-1">
-                        <span className="font-extrabold text-[10px] md:text-[11px] text-white truncate">{tier.name}</span>
-                        <div className="font-mono text-[8px] text-slate-400 font-bold whitespace-nowrap">
-                          {tier.incomeGen > 0 && <span className="text-green-400">+${tier.incomeGen}/d</span>}
-                          {tier.incomeGen < 0 && <span className="text-red-400">-${Math.abs(tier.incomeGen)}/d</span>}
-                          {tier.popGen > 0 && <span className="text-blue-300 ml-1">+{tier.popGen}p/d</span>}
-                        </div>
-                      </div>
-                      <p className="text-[8.5px] md:text-[9.5px] text-slate-400 leading-tight mt-0.5">{tier.description}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
 
       {/* Modal - SkyMetropolis City Advisory Guide */}
       {showHelpMenu && (
@@ -1218,6 +1636,353 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                 className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 hover:shadow-cyan-500/20 hover:shadow-sm text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer"
               >
                 Got it, back to building!
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Modal - SkyMetropolis Save Vault & Laptop Transfer Portal */}
+      {showSavesMenu && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 pointer-events-auto select-none">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            
+            {/* Modal Header */}
+            <div className="p-4 md:p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900/60">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">⚙️</span>
+                <div className="text-left">
+                  <h3 className="font-bold text-white text-sm md:text-base">City Settings & Saves Control Desk</h3>
+                  <p className="text-[10px] md:text-xs text-slate-400">Configure simulation options, save files, or copy instant travel codes</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowSavesMenu(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+                title="Close settings menu"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-4 md:p-6 overflow-y-auto space-y-5 text-slate-300 text-xs md:text-sm text-left">
+              
+              {/* Dynamic Action Status Messages */}
+              {saveStatus && (
+                <div className={`p-3 rounded-xl border flex items-start gap-2.5 ${
+                  saveStatus.isError 
+                    ? 'bg-red-950/50 border-red-500/50 text-red-300' 
+                    : 'bg-emerald-950/50 border-emerald-500/50 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
+                }`}>
+                  <span className="text-sm">{saveStatus.isError ? '⚠️' : '✅'}</span>
+                  <div className="flex-1 text-[11px] md:text-xs font-semibold font-sans">
+                    {saveStatus.message}
+                  </div>
+                  <button 
+                    onClick={() => setSaveStatus(null)} 
+                    className="text-[10px] opacity-60 hover:opacity-100 font-bold px-1.5 cursor-pointer ml-auto"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* SECTION 1: Game Options & Visual Performance Settings */}
+              <section className="bg-slate-950/50 p-4 rounded-xl border border-slate-800/80 space-y-3.5">
+                <h4 className="text-amber-400 font-bold flex items-center gap-2 text-xs md:text-sm border-b border-slate-800 pb-1.5">
+                  🕹️ Simulation & Graphics Settings
+                </h4>
+                
+                <div className="space-y-4">
+                  {/* Resolution Toggle */}
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="text-left flex-1">
+                      <span className="block text-xs font-bold text-slate-200">Rendering Resolution Fidelity</span>
+                      <span className="text-[10px] text-slate-400">Standard for smooth frame-rates; High unlocks detailed tile shadows and anti-aliasing.</span>
+                    </div>
+                    <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 p-0.5 rounded-lg shrink-0">
+                      <button
+                        onClick={() => onSetQuality('standard')}
+                        className={`text-[9px] uppercase px-2 py-1 rounded font-bold transition-all cursor-pointer ${quality === 'standard' ? 'bg-slate-700 text-amber-400 shadow' : 'text-slate-400 hover:text-slate-200'}`}
+                      >
+                        STD (Standard)
+                      </button>
+                      <button
+                        onClick={() => onSetQuality('high')}
+                        className={`text-[9px] uppercase px-2 py-1 rounded font-bold transition-all cursor-pointer ${quality === 'high' ? 'bg-indigo-600 border border-indigo-500 text-white shadow-[0_0_8px_rgba(99,102,241,0.3)]' : 'text-slate-400 hover:text-slate-200'}`}
+                      >
+                        ✨ High-Fidelity
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* AI Goals Advisor Toggle */}
+                  <div className="flex items-center justify-between gap-4 border-t border-slate-800/60 pt-3">
+                    <div className="text-left flex-1">
+                      <span className="block text-xs font-bold text-slate-200">Gemini Strategic AI Goals Advisor</span>
+                      <span className="text-[10px] text-slate-400">Controls generation of dynamic city targets, financial rewards, and morning news ticker events.</span>
+                    </div>
+                    <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 p-0.5 rounded-lg shrink-0">
+                      <button
+                        onClick={() => onToggleAiEnabled(false)}
+                        className={`text-[9px] uppercase px-2 py-1 rounded font-bold transition-all cursor-pointer ${!aiEnabled ? 'bg-slate-700 text-amber-400 shadow' : 'text-slate-400 hover:text-slate-200'}`}
+                      >
+                        OFF (Pure Mode)
+                      </button>
+                      <button
+                        onClick={() => onToggleAiEnabled(true)}
+                        className={`text-[9px] uppercase px-2 py-1 rounded font-bold transition-all cursor-pointer ${aiEnabled ? 'bg-emerald-600 text-white shadow-[0_0_8px_rgba(16,185,129,0.3)]' : 'text-slate-400 hover:text-slate-200'}`}
+                      >
+                        ON (Advisor Mode)
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Camera Auto-Rotation */}
+                  <div className="flex items-center justify-between gap-4 border-t border-slate-800/60 pt-3">
+                    <div className="text-left flex-1">
+                      <span className="block text-xs font-bold text-slate-200">Cinematic Orbit Camera Tour</span>
+                      <span className="text-[10px] text-slate-400">Actively rotates the camera slowly around your floating city for a dynamic scenic showcase.</span>
+                    </div>
+                    <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 p-0.5 rounded-lg shrink-0">
+                      <button
+                        onClick={() => onToggleAutoRotate(false)}
+                        className={`text-[9px] uppercase px-2 py-1 rounded font-bold transition-all cursor-pointer ${!autoRotate ? 'bg-slate-700 text-amber-400 shadow' : 'text-slate-400 hover:text-slate-200'}`}
+                      >
+                        OFF
+                      </button>
+                      <button
+                        onClick={() => onToggleAutoRotate(true)}
+                        className={`text-[9px] uppercase px-2 py-1 rounded font-bold transition-all cursor-pointer ${autoRotate ? 'bg-indigo-600 text-white shadow-[0_0_8px_rgba(99,102,241,0.3)]' : 'text-slate-400 hover:text-slate-200'}`}
+                      >
+                        🎥 ACTIVE
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Keyboard Guide HUD Overlay */}
+                  <div className="flex items-center justify-between gap-4 border-t border-slate-800/60 pt-3">
+                    <div className="text-left flex-1">
+                      <span className="block text-xs font-bold text-slate-200">Keyboard Controls HUD Overlay</span>
+                      <span className="text-[10px] text-slate-400">Shows or hides the WASD/Arrow keys floating visual guide box in the bottom-left of the screen.</span>
+                    </div>
+                    <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 p-0.5 rounded-lg shrink-0">
+                      <button
+                        onClick={() => onToggleShowControls(false)}
+                        className={`text-[9px] uppercase px-2 py-1 rounded font-bold transition-all cursor-pointer ${!showControls ? 'bg-slate-700 text-amber-400 shadow' : 'text-slate-400 hover:text-slate-200'}`}
+                      >
+                        HIDE
+                      </button>
+                      <button
+                        onClick={() => onToggleShowControls(true)}
+                        className={`text-[9px] uppercase px-2 py-1 rounded font-bold transition-all cursor-pointer ${showControls ? 'bg-indigo-600 text-white shadow-[0_0_8px_rgba(99,102,241,0.3)]' : 'text-slate-400 hover:text-slate-200'}`}
+                      >
+                        SHOW
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Always Daytime Mode */}
+                  <div className="flex items-center justify-between gap-4 border-t border-slate-800/60 pt-3">
+                    <div className="text-left flex-1">
+                      <span className="block text-xs font-bold text-slate-200">Always Daytime Mode</span>
+                      <span className="text-[10px] text-slate-400">Lock the skies at daytime light values and disable dynamic night simulation cycles completely.</span>
+                    </div>
+                    <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 p-0.5 rounded-lg shrink-0">
+                      <button
+                        onClick={() => onToggleAlwaysDaytime(false)}
+                        className={`text-[9px] uppercase px-2 py-1 rounded font-bold transition-all cursor-pointer ${!alwaysDaytime ? 'bg-slate-700 text-amber-400 shadow' : 'text-slate-400 hover:text-slate-200'}`}
+                      >
+                        OFF
+                      </button>
+                      <button
+                        onClick={() => onToggleAlwaysDaytime(true)}
+                        className={`text-[9px] uppercase px-2 py-1 rounded font-bold transition-all cursor-pointer ${alwaysDaytime ? 'bg-indigo-600 border border-indigo-500 text-white shadow-[0_0_8px_rgba(99,102,241,0.3)]' : 'text-slate-400 hover:text-slate-200'}`}
+                      >
+                        🌞 ALWAYS DAY
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Backdrop Sky Theme selection */}
+                  <div className="flex flex-col gap-2 border-t border-slate-800/60 pt-3">
+                    <div className="text-left">
+                      <span className="block text-xs font-bold text-slate-200">Utopia Canopy Backdrop Atmosphere</span>
+                      <span className="text-[10px] text-slate-400">Customize the clear color theme of the sky atmosphere framing your floating island.</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1.5 bg-slate-900/60 border border-slate-800/80 p-1 rounded-xl">
+                      {(['azure', 'midnight', 'sunset', 'cosmic'] as const).map((theme) => {
+                        const active = skyTheme === theme;
+                        const label = theme === 'azure' ? '🔵 Sky Azure' :
+                                      theme === 'midnight' ? '🌑 Midnight' :
+                                      theme === 'sunset' ? '🌅 Sunset' : '🌌 Cosmic';
+                        return (
+                          <button
+                            key={theme}
+                            onClick={() => onSetSkyTheme(theme)}
+                            className={`py-1 text-[9px] font-bold uppercase rounded-lg border transition-all cursor-pointer select-none text-center
+                              ${active 
+                                ? 'border-amber-500 bg-amber-500/10 text-amber-300 shadow' 
+                                : 'border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200'}`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* SECTION 2: Browser Autosave & Local DB Cache Management */}
+              <section className="bg-slate-950/50 p-4 rounded-xl border border-slate-800/80 space-y-3">
+                <h4 className="text-emerald-400 font-bold flex items-center gap-2 text-xs md:text-sm border-b border-slate-800 pb-1.5 border-emerald-900/40">
+                  🗄️ Browser Cache Slots (Persistent Database)
+                </h4>
+                <p className="text-slate-400 text-[10px] md:text-xs leading-relaxed">
+                  The game automatically records your 16x16 layout whenever a tile builds or state changes. Use these tools to force save checkpoints or restore previous browser session states.
+                </p>
+                <div className="grid grid-cols-2 gap-2 pt-1 font-mono">
+                  <button
+                    onClick={manualBrowserSave}
+                    className="py-2 bg-slate-850 hover:bg-slate-800 hover:border-emerald-500 text-slate-200 border border-slate-700/60 rounded-lg text-[10px] md:text-xs font-bold transition-all text-center cursor-pointer select-none active:scale-95"
+                    title="Force write immediate state snapshot to browser"
+                  >
+                    💾 Force Save Day
+                  </button>
+                  <button
+                    onClick={manualBrowserLoad}
+                    className="py-2 bg-slate-850 hover:bg-slate-800 hover:border-indigo-500 text-slate-200 border border-slate-700/60 rounded-lg text-[10px] md:text-xs font-bold transition-all text-center cursor-pointer select-none active:scale-95"
+                    title="Load previously saved backup from browser memories"
+                  >
+                    📖 Restore Browser Slot
+                  </button>
+                </div>
+              </section>
+
+              {/* SECTION 3: Save File Blueprint System (JSON Export/Import) */}
+              <section className="bg-slate-950/50 p-4 rounded-xl border border-slate-800/80 space-y-3">
+                <h4 className="text-cyan-400 font-bold flex items-center gap-2 text-xs md:text-sm border-b border-slate-800 pb-1.5 border-cyan-900/40">
+                  📁 Save File Blueprints (.json)
+                </h4>
+                <p className="text-slate-400 text-[10px] md:text-xs leading-relaxed">
+                  Export your entire floating city state as a lightweight JSON blueprint file. Perfect for storing historic backups on your drive or transferring files directly.
+                </p>
+                <div className="grid grid-cols-2 gap-2 pt-1 font-mono">
+                  <button
+                    onClick={downloadSaveFile}
+                    className="py-2 bg-cyan-950/20 hover:bg-cyan-900/30 text-cyan-300 border border-cyan-800/60 hover:border-cyan-500 rounded-lg text-[10px] md:text-xs font-bold transition-all text-center cursor-pointer select-none flex items-center justify-center gap-1.5 active:scale-95"
+                    title="Download the full 16x16 grid and stats state as a JSON file"
+                  >
+                    📤 Download save.json
+                  </button>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="py-2 bg-cyan-950/20 hover:bg-cyan-900/30 text-cyan-300 border border-cyan-800/60 hover:border-cyan-500 rounded-lg text-[10px] md:text-xs font-bold transition-all text-center cursor-pointer select-none flex items-center justify-center gap-1.5 active:scale-95"
+                    title="Upload and restore a SkyMetropolis city state JSON file"
+                  >
+                    📥 Upload save.json
+                  </button>
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    onChange={handleFileUpload} 
+                    accept=".json" 
+                    className="hidden" 
+                  />
+                </div>
+              </section>
+
+              {/* SECTION 4: Laptop-to-Laptop Transfer Code (Compressed String string) */}
+              <section className="bg-slate-950/50 p-4 rounded-xl border border-slate-800/80 space-y-3">
+                <h4 className="text-indigo-400 font-bold flex items-center gap-2 text-xs md:text-sm border-b border-slate-800 pb-1.5 border-indigo-900/40">
+                  💻 Keyboard-Paste Transfer Code (No files required!)
+                </h4>
+                <p className="text-slate-400 text-[10px] md:text-xs leading-relaxed">
+                  Moving progress to another laptop? Just copy the generated text string below, paste it directly in the text input on your other laptop click "Load Code", and construct instantly!
+                </p>
+                
+                {/* Generated Code Area */}
+                <div className="space-y-1.5">
+                  <span className="block text-[9px] font-bold text-indigo-400 uppercase tracking-widest font-mono">Your Current Laptop Transfer Code:</span>
+                  <div className="flex gap-1.5">
+                    <textarea
+                      readOnly
+                      onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                      value={generateSaveString()}
+                      className="w-full flex-1 h-12 bg-slate-950 text-slate-300 border border-slate-800 rounded-lg p-1.5 text-[9px] font-mono text-left focus:outline-none focus:border-amber-500/55 cursor-text leading-tight resize-none select-all font-mono"
+                      title="Click once to select all, then use Ctrl+C / Cmd+C"
+                    />
+                    <button
+                      onClick={() => {
+                        const code = generateSaveString();
+                        navigator.clipboard.writeText(code)
+                          .then(() => {
+                            setSaveStatus({ message: "📋 Utopia transfer code copied to clipboard successfully! Paste this code in the input area of your other laptop.", isError: false });
+                          })
+                          .catch(() => {
+                            setSaveStatus({ message: "Note: Clipboard blocked by frame. Please highlight the text area and copy it manually using Ctrl+C.", isError: false });
+                          });
+                      }}
+                      className="px-3 bg-indigo-650/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-800/60 hover:border-indigo-500 rounded-lg text-[10.5px] font-bold transition-all cursor-pointer font-sans select-none flex items-center justify-center active:scale-95 shrink-0"
+                      title="Copy transfer string to clipboard"
+                    >
+                      Copy Code
+                    </button>
+                  </div>
+                </div>
+
+                {/* Import Code Area */}
+                <div className="space-y-1.5 pt-1">
+                  <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest font-mono">Paste code to Import on this laptop:</span>
+                  <div className="flex gap-1.5">
+                    <textarea
+                      placeholder="Paste your 16x16 SkyMetropolis transfer code here..."
+                      value={importedCode}
+                      onChange={(e) => setImportedCode(e.target.value)}
+                      className="w-full flex-1 h-12 bg-slate-950 text-slate-200 border border-slate-800 hover:border-slate-700 rounded-lg p-1.5 text-[9px] font-mono select-text placeholder-slate-700 text-left focus:outline-none focus:border-indigo-550 leading-tight resize-none font-mono"
+                    />
+                    <button
+                      onClick={() => {
+                        loadFromSaveString(importedCode);
+                      }}
+                      className="px-3 bg-emerald-600/20 hover:bg-emerald-650/30 text-emerald-300 border border-emerald-800/60 hover:border-emerald-500 rounded-lg text-[10.5px] font-bold transition-all cursor-pointer font-sans select-none flex items-center justify-center whitespace-nowrap active:scale-95 shrink-0"
+                      title="Parse transfer code and recover layout"
+                    >
+                      ⚡ Load Code
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              {/* SECTION 5: Danger Zone Resets */}
+              <section className="bg-red-950/10 p-3 rounded-xl border border-red-950/60 flex flex-col md:flex-row md:items-center justify-between gap-3 pt-3">
+                <div className="text-left flex-1">
+                  <h5 className="font-bold text-red-400 text-xs flex items-center gap-1">⚠️ Danger Zone: Fresh Rebuild</h5>
+                  <p className="text-[9.5px] text-slate-500 leading-tight mt-0.5">Completely clean the browser cache, clear your current city state, and reset map grids to 16x16.</p>
+                </div>
+                <button
+                  onClick={() => {
+                    onResetGame();
+                    setShowSavesMenu(false);
+                  }}
+                  className="py-1.5 px-3 bg-red-950/40 hover:bg-red-950 text-red-300 border border-red-800/40 hover:border-red-600 rounded-lg text-[10px] font-bold font-mono transition-all cursor-pointer whitespace-nowrap select-none active:scale-95 shrink-0"
+                >
+                  💣 Rebuild Island
+                </button>
+              </section>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-800 flex justify-end bg-slate-900/40 pb-5">
+              <button
+                onClick={() => setShowSavesMenu(false)}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 hover:shadow-indigo-500/20 hover:shadow-sm text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer select-none active:scale-95"
+              >
+                Return to Metropolis
               </button>
             </div>
 

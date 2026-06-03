@@ -134,8 +134,6 @@ const expandGrid = (currentGrid: Grid): Grid => {
 
 function App() {
   // --- Game State ---
-  const [gameStarted, setGameStarted] = useState(false);
-  const [aiEnabled, setAiEnabled] = useState(true);
   const [quality, setQuality] = useState<'standard' | 'high'>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('skymetropolis-quality');
@@ -144,47 +142,174 @@ function App() {
     return 'standard';
   });
 
+  const [skyTheme, setSkyTheme] = useState<'azure' | 'midnight' | 'sunset' | 'cosmic'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('skymetropolis-sky-theme');
+      if (saved === 'azure' || saved === 'midnight' || saved === 'sunset' || saved === 'cosmic') return saved;
+    }
+    return 'azure';
+  });
+
+  const [autoRotate, setAutoRotate] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('skymetropolis-auto-rotate');
+      if (saved !== null) return saved === 'true';
+    }
+    return false;
+  });
+
+  const [showControls, setShowControls] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('skymetropolis-show-controls');
+      if (saved !== null) return saved === 'true';
+    }
+    return true;
+  });
+
+  const [alwaysDaytime, setAlwaysDaytime] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('skymetropolis-always-daytime');
+      if (saved !== null) return saved === 'true';
+    }
+    return false;
+  });
+
   useEffect(() => {
     localStorage.setItem('skymetropolis-quality', quality);
   }, [quality]);
 
-  const [grid, setGrid] = useState<Grid>(createInitialGrid);
-  const [stats, setStats] = useState<CityStats>({
-    money: INITIAL_MONEY,
-    population: 0,
-    day: 1,
-    happiness: 80,
-    taxRates: {
-      residential: 10,
-      commercial: 10,
-      industrial: 10,
-      office: 10,
-    },
-    loans: [],
-    activePolicies: [],
-    ratingElectricity: 100,
-    ratingWater: 100,
-    ratingSewage: 100,
-    ratingHeating: 100,
-    ratingServices: 100,
-    districts: [],
-    unemployment: 0,
-    traffic: 100,
-    landValue: 35,
-    popChange: 0,
-    netIncome: 120,
-    demandRes: 50,
-    demandCom: 35,
-    demandInd: 20,
+  useEffect(() => {
+    localStorage.setItem('skymetropolis-sky-theme', skyTheme);
+  }, [skyTheme]);
+
+  useEffect(() => {
+    localStorage.setItem('skymetropolis-auto-rotate', String(autoRotate));
+  }, [autoRotate]);
+
+  useEffect(() => {
+    localStorage.setItem('skymetropolis-show-controls', String(showControls));
+  }, [showControls]);
+
+  useEffect(() => {
+    localStorage.setItem('skymetropolis-always-daytime', String(alwaysDaytime));
+  }, [alwaysDaytime]);
+
+  const [grid, setGrid] = useState<Grid>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('skymetropolis-save');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.grid) return parsed.grid;
+        } catch (e) {
+          console.error("Failed to parse saved grid", e);
+        }
+      }
+    }
+    return createInitialGrid();
   });
+
+  const [stats, setStats] = useState<CityStats>(() => {
+    const initial = {
+      money: INITIAL_MONEY,
+      population: 0,
+      day: 1,
+      happiness: 80,
+      taxRates: {
+        residential: 10,
+        commercial: 10,
+        industrial: 10,
+        office: 10,
+      },
+      loans: [],
+      activePolicies: [],
+      ratingElectricity: 100,
+      ratingWater: 100,
+      ratingSewage: 100,
+      ratingHeating: 100,
+      ratingServices: 100,
+      districts: [],
+      unemployment: 0,
+      traffic: 100,
+      landValue: 35,
+      popChange: 0,
+      netIncome: 120,
+      demandRes: 50,
+      demandCom: 35,
+      demandInd: 20,
+    };
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('skymetropolis-save');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.stats) {
+            return { ...initial, ...parsed.stats };
+          }
+        } catch (e) {
+          console.error("Failed to parse saved stats", e);
+        }
+      }
+    }
+    return initial;
+  });
+
   const [selectedTool, setSelectedTool] = useState<BuildingType>(BuildingType.Road);
   const [paintingDistrictId, setPaintingDistrictId] = useState<string | null>(null);
   const [isBuyLandMode, setIsBuyLandMode] = useState<boolean>(false);
   
   // --- AI State ---
-  const [currentGoal, setCurrentGoal] = useState<AIGoal | null>(null);
+  const [currentGoal, setCurrentGoal] = useState<AIGoal | null>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('skymetropolis-save');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.currentGoal !== undefined) return parsed.currentGoal;
+        } catch (e) {}
+      }
+    }
+    return null;
+  });
   const [isGeneratingGoal, setIsGeneratingGoal] = useState(false);
-  const [newsFeed, setNewsFeed] = useState<NewsItem[]>([]);
+  const [newsFeed, setNewsFeed] = useState<NewsItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('skymetropolis-save');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.newsFeed) return parsed.newsFeed;
+        } catch (e) {}
+      }
+    }
+    return [];
+  });
+
+  const [aiEnabled, setAiEnabled] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('skymetropolis-save');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.aiEnabled !== undefined) return parsed.aiEnabled;
+        } catch (e) {}
+      }
+    }
+    return true;
+  });
+
+  const [gameStarted, setGameStarted] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('skymetropolis-save');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.gameStarted !== undefined) return parsed.gameStarted;
+        } catch (e) {}
+      }
+    }
+    return false;
+  });
   
   // Refs for accessing state inside intervals without dependencies
   const gridRef = useRef(grid);
@@ -197,6 +322,26 @@ function App() {
   useEffect(() => { statsRef.current = stats; }, [stats]);
   useEffect(() => { goalRef.current = currentGoal; }, [currentGoal]);
   useEffect(() => { aiEnabledRef.current = aiEnabled; }, [aiEnabled]);
+
+  // --- Auto-Save Effect ---
+  useEffect(() => {
+    if (!gameStarted) return;
+    try {
+      const saveData = {
+        version: 1,
+        grid,
+        stats,
+        currentGoal,
+        newsFeed,
+        aiEnabled,
+        gameStarted,
+        timestamp: Date.now()
+      };
+      localStorage.setItem('skymetropolis-save', JSON.stringify(saveData));
+    } catch (e) {
+      console.error("Auto-save failed", e);
+    }
+  }, [grid, stats, currentGoal, newsFeed, aiEnabled, gameStarted]);
 
   // Check AI Goal Completion as an outcome of state changes
   useEffect(() => {
@@ -885,13 +1030,99 @@ function App() {
     }
   }, []);
 
+  const handleLoadGameData = useCallback((saveData: any) => {
+    if (!saveData) return;
+    
+    setIsBuyLandMode(false);
+    setPaintingDistrictId(null);
+    
+    if (saveData.grid) {
+      setGrid(saveData.grid);
+      gridRef.current = saveData.grid;
+    }
+    if (saveData.stats) {
+      setStats(saveData.stats);
+      statsRef.current = saveData.stats;
+    }
+    if (saveData.currentGoal !== undefined) {
+      setCurrentGoal(saveData.currentGoal);
+      goalRef.current = saveData.currentGoal;
+    }
+    if (saveData.newsFeed !== undefined) {
+      setNewsFeed(saveData.newsFeed);
+    }
+    if (saveData.aiEnabled !== undefined) {
+      setAiEnabled(saveData.aiEnabled);
+      aiEnabledRef.current = saveData.aiEnabled;
+    }
+    if (saveData.gameStarted !== undefined) {
+      setGameStarted(saveData.gameStarted);
+    }
+  }, []);
+
+  const handleResetGame = useCallback(() => {
+    if (window.confirm("⚠️ HIGH ALERT: Are you sure you want to completely deconstruct the city and start a fresh level? All progress will be lost.")) {
+      localStorage.removeItem('skymetropolis-save');
+      const freshGrid = createInitialGrid();
+      setGrid(freshGrid);
+      gridRef.current = freshGrid;
+      
+      const freshStats = {
+        money: INITIAL_MONEY,
+        population: 0,
+        day: 1,
+        happiness: 80,
+        taxRates: {
+          residential: 10,
+          commercial: 10,
+          industrial: 10,
+          office: 10,
+        },
+        loans: [],
+        activePolicies: [],
+        ratingElectricity: 100,
+        ratingWater: 100,
+        ratingSewage: 100,
+        ratingHeating: 100,
+        ratingServices: 100,
+        districts: [],
+        unemployment: 0,
+        traffic: 100,
+        landValue: 35,
+        popChange: 0,
+        netIncome: 120,
+        demandRes: 50,
+        demandCom: 35,
+        demandInd: 20,
+      };
+      setStats(freshStats);
+      statsRef.current = freshStats;
+      
+      setCurrentGoal(null);
+      goalRef.current = null;
+      setNewsFeed([{
+        id: Date.now().toString(),
+        text: "City rebuilt! A pristine 16x16 floating island is under construction.",
+        type: 'positive'
+      }]);
+      setGameStarted(false);
+      setIsBuyLandMode(false);
+      setPaintingDistrictId(null);
+    }
+  }, []);
+
   const handleStart = (enabled: boolean) => {
     setAiEnabled(enabled);
     setGameStarted(true);
   };
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden selection:bg-transparent selection:text-transparent bg-sky-900">
+    <div className={`relative w-screen h-screen overflow-hidden selection:bg-transparent selection:text-transparent transition-all duration-700 ${
+      skyTheme === 'azure' ? 'bg-sky-900' :
+      skyTheme === 'midnight' ? 'bg-slate-950' :
+      skyTheme === 'sunset' ? 'bg-amber-950' :
+      'bg-indigo-950'
+    }`}>
       {/* 3D Rendering Layer - Always visible now, providing background for start screen */}
       <IsoMap 
         grid={grid} 
@@ -901,6 +1132,9 @@ function App() {
         stats={stats}
         quality={quality}
         isBuyLandMode={isBuyLandMode}
+        skyTheme={skyTheme}
+        autoRotate={autoRotate}
+        alwaysDaytime={alwaysDaytime}
       />
       
       {/* Start Screen Overlay */}
@@ -926,6 +1160,18 @@ function App() {
           onSetQuality={setQuality}
           isBuyLandMode={isBuyLandMode}
           onToggleBuyLandMode={handleToggleBuyLandMode}
+          grid={grid}
+          onLoadSaveData={handleLoadGameData}
+          onResetGame={handleResetGame}
+          onToggleAiEnabled={setAiEnabled}
+          skyTheme={skyTheme}
+          onSetSkyTheme={setSkyTheme}
+          autoRotate={autoRotate}
+          onToggleAutoRotate={setAutoRotate}
+          showControls={showControls}
+          onToggleShowControls={setShowControls}
+          alwaysDaytime={alwaysDaytime}
+          onToggleAlwaysDaytime={setAlwaysDaytime}
         />
       )}
 

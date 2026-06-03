@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
 */
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback, Suspense } from 'react';
 import { Canvas, useFrame, useThree, ThreeElements } from '@react-three/fiber';
 import { MapControls, Environment, Instance, Instances, Float, useTexture, Outlines, OrthographicCamera, Html } from '@react-three/drei';
 import * as THREE from 'three';
@@ -1607,7 +1607,9 @@ const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, hoveredTool, populat
           shadow-bias={quality === 'high' ? -0.0005 : -0.001}
         >
         </directionalLight>
-        <Environment preset="city" />
+        <Suspense fallback={null}>
+          <Environment preset="city" />
+        </Suspense>
 
         <EnvironmentEffects />
 

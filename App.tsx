@@ -197,6 +197,31 @@ function App() {
   useEffect(() => { goalRef.current = currentGoal; }, [currentGoal]);
   useEffect(() => { aiEnabledRef.current = aiEnabled; }, [aiEnabled]);
 
+  // Check AI Goal Completion as an outcome of state changes
+  useEffect(() => {
+    if (!gameStarted || !aiEnabled || !currentGoal || currentGoal.completed) return;
+
+    // Count building types on the grid
+    const buildingCounts: Record<string, number> = {};
+    grid.flat().forEach(tile => {
+      if (tile.buildingType !== BuildingType.None && tile.buildingType !== BuildingType.Road) {
+        const lvl = tile.level || 1;
+        buildingCounts[tile.buildingType] = (buildingCounts[tile.buildingType] || 0) + lvl;
+      }
+    });
+
+    let isMet = false;
+    if (currentGoal.targetType === 'money' && stats.money >= currentGoal.targetValue) isMet = true;
+    if (currentGoal.targetType === 'population' && stats.population >= currentGoal.targetValue) isMet = true;
+    if (currentGoal.targetType === 'building_count' && currentGoal.buildingType) {
+      if ((buildingCounts[currentGoal.buildingType] || 0) >= currentGoal.targetValue) isMet = true;
+    }
+
+    if (isMet) {
+      setCurrentGoal(prev => prev ? { ...prev, completed: true } : null);
+    }
+  }, [stats.money, stats.population, grid, currentGoal, aiEnabled, gameStarted]);
+
   // --- AI Logic Wrappers ---
 
   const addNewsItem = useCallback((item: NewsItem) => {
@@ -644,21 +669,6 @@ function App() {
           demandCom: demandComNew,
           demandInd: demandIndNew,
         };
-
-        // 3. Check AI Goal Completion
-        const goal = goalRef.current;
-        if (aiEnabledRef.current && goal && !goal.completed) {
-          let isMet = false;
-          if (goal.targetType === 'money' && newStats.money >= goal.targetValue) isMet = true;
-          if (goal.targetType === 'population' && newStats.population >= goal.targetValue) isMet = true;
-          if (goal.targetType === 'building_count' && goal.buildingType) {
-            if ((buildingCounts[goal.buildingType] || 0) >= goal.targetValue) isMet = true;
-          }
-
-          if (isMet) {
-            setCurrentGoal({ ...goal, completed: true });
-          }
-        }
 
         return newStats;
       });

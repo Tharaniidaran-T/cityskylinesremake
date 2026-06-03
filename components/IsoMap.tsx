@@ -1549,6 +1549,56 @@ const Cursor = ({ x, y, color, gridLength }: { x: number, y: number, color: stri
   );
 };
 
+// Error Boundary for R3F Canvas to prevent crashes caused by WebGL limitations or offline preset CDN blocks
+class CanvasErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("Canvas Error Boundary caught an error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 p-6 text-center z-50">
+          <div className="max-w-md bg-slate-900 border border-red-500/30 p-8 rounded-2xl shadow-2xl">
+            <div className="w-16 h-16 bg-red-950/50 border border-red-500/50 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4 animate-pulse">
+              ⚠️
+            </div>
+            <h3 className="text-xl font-bold text-white mb-2">Graphics Engine Paused</h3>
+            <p className="text-sm text-slate-400 mb-6">
+              WebGL or 3D Hardware acceleration is unavailable, blocked by a school/work network firewall, or crashed.
+            </p>
+            <div className="text-left bg-slate-950/60 p-3 rounded-lg border border-slate-800 font-mono text-[10px] text-red-400 max-h-32 overflow-y-auto mb-6">
+              {this.state.error?.message || "Unknown rendering exception"}
+            </div>
+            <button
+              onClick={() => {
+                this.setState({ hasError: false, error: null });
+                window.location.reload();
+              }}
+              className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold rounded-lg transition-colors cursor-pointer text-sm"
+            >
+              Reload Page & Retry
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 interface IsoMapProps {
   grid: Grid;
@@ -1579,39 +1629,43 @@ const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, hoveredTool, populat
 
   return (
     <div className="absolute inset-0 bg-sky-900 touch-none">
-      <Canvas 
-        key={quality}
-        shadows={{ type: quality === 'high' ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap }} 
-        dpr={quality === 'high' ? (typeof window !== 'undefined' ? Math.min(2, window.devicePixelRatio) : 2) : 1} 
-        gl={{ antialias: quality === 'high', powerPreference: "high-performance" }}
-      >
-        <OrthographicCamera makeDefault zoom={45} position={[20, 20, 20]} near={-100} far={200} />
-        
-        <MapControls 
-          enableRotate={true}
-          enableZoom={true}
-          minZoom={20}
-          maxZoom={120}
-          maxPolarAngle={Math.PI / 2.2}
-          minPolarAngle={0.1}
-          target={[0,-0.5,0]}
-        />
-
-        <ambientLight intensity={0.5} color="#cceeff" />
-        <directionalLight
-          castShadow
-          position={[15, 20, 10]}
-          intensity={2}
-          color="#fffbeb"
-          shadow-mapSize={quality === 'high' ? [2048, 2048] : [512, 512]}
-          shadow-camera-left={-15} shadow-camera-right={15}
-          shadow-camera-top={15} shadow-camera-bottom={-15}
-          shadow-bias={quality === 'high' ? -0.0005 : -0.001}
+      <CanvasErrorBoundary>
+        <Canvas 
+          key={quality}
+          shadows={{ type: quality === 'high' ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap }} 
+          dpr={quality === 'high' ? (typeof window !== 'undefined' ? Math.min(2, window.devicePixelRatio) : 2) : 1} 
+          gl={{ antialias: quality === 'high', powerPreference: "high-performance" }}
         >
-        </directionalLight>
-        <Suspense fallback={null}>
-          <Environment preset="city" />
-        </Suspense>
+          <OrthographicCamera makeDefault zoom={45} position={[20, 20, 20]} near={-100} far={200} />
+          
+          <MapControls 
+            enableRotate={true}
+            enableZoom={true}
+            minZoom={20}
+            maxZoom={120}
+            maxPolarAngle={Math.PI / 2.2}
+            minPolarAngle={0.1}
+            target={[0,-0.5,0]}
+          />
+
+          <ambientLight intensity={0.6} color="#dbeafe" />
+          <hemisphereLight color="#cceeff" groundColor="#3b82f6" intensity={0.4} />
+          <directionalLight
+            castShadow
+            position={[15, 20, 10]}
+            intensity={2}
+            color="#fffbeb"
+            shadow-mapSize={quality === 'high' ? [2048, 2048] : [512, 512]}
+            shadow-camera-left={-15} shadow-camera-right={15}
+            shadow-camera-top={15} shadow-camera-bottom={-15}
+            shadow-bias={quality === 'high' ? -0.0005 : -0.001}
+          >
+          </directionalLight>
+          <directionalLight
+            position={[-12, 10, -10]}
+            intensity={0.4}
+            color="#a5b4fc"
+          />
 
         <EnvironmentEffects />
 
@@ -1743,6 +1797,7 @@ const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, hoveredTool, populat
         </group>
         
       </Canvas>
+      </CanvasErrorBoundary>
     </div>
   );
 };

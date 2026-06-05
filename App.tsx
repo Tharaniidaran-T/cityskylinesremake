@@ -237,6 +237,11 @@ function App() {
       demandRes: 50,
       demandCom: 35,
       demandInd: 20,
+      jobStaffingRatio: 1.0,
+      comSpamFactor: 1.0,
+      indSpamFactor: 1.0,
+      offSpamFactor: 1.0,
+      totalJobs: 0,
     };
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('skymetropolis-save');
@@ -530,6 +535,71 @@ function App() {
         const iTax = prev.taxRates?.industrial ?? 10;
         const oTax = prev.taxRates?.office ?? 10;
 
+        // Metrics for staffing ratio and overspecialization (spam) penalties
+        const totalJobs = (comLevelSum * 8) + (indLevelSum * 15) + (offLevelSum * 12) +
+                          (policeLevelSum * 6) + (fireLevelSum * 6) + (hospitalLevelSum * 8) + (schoolLevelSum * 8) +
+                          (powerPlantLevelSum * 4);
+        
+        const workforce = Math.round(prev.population * 0.65);
+        
+        // Staffing ratio: "you need people in order to make money"
+        // If there are job-providing buildings, they must have employees to earn money.
+        // If totalJobs is 0, staffing ratio is 1.0 (no penalty)
+        const jobStaffingRatio = totalJobs === 0 ? 1.0 : Math.min(1.0, workforce / totalJobs);
+
+        // Anti-spam factor: "you cant just spam one type of job building and get rich"
+        // If a single job type exceeds 60% of all job buildings, it suffers from oversaturation.
+        let comSpamFactor = 1.0;
+        let indSpamFactor = 1.0;
+        let offSpamFactor = 1.0;
+
+        const totalJobLevels = comLevelSum + indLevelSum + offLevelSum;
+        if (totalJobLevels >= 4) {
+          const comRatio = comLevelSum / totalJobLevels;
+          const indRatio = indLevelSum / totalJobLevels;
+          const offRatio = offLevelSum / totalJobLevels;
+
+          if (comRatio > 0.6) {
+            comSpamFactor = Math.max(0.15, 1.0 - (comRatio - 0.6) * 2.0);
+          }
+          if (indRatio > 0.6) {
+            indSpamFactor = Math.max(0.15, 1.0 - (indRatio - 0.6) * 2.0);
+          }
+          if (offRatio > 0.6) {
+            offSpamFactor = Math.max(0.15, 1.0 - (offRatio - 0.6) * 2.0);
+          }
+        }
+
+        // Random chance of dispatching informative warnings (8% daily chance if problematic)
+        if (Math.random() < 0.08) {
+          if (workforce === 0 && totalJobs > 0) {
+            setTimeout(() => {
+              addNewsItem({
+                id: (Date.now() + Math.random()).toString(),
+                text: `🛑 Understaffing crisis! Zero workforce. Commercial and Industrial zones cannot operate or generate taxes without citizens!`,
+                type: 'negative'
+              });
+            }, 10);
+          } else if (jobStaffingRatio < 0.5) {
+            setTimeout(() => {
+              addNewsItem({
+                id: (Date.now() + Math.random()).toString(),
+                text: `⚠️ Labor shortage: Job positions are only ${Math.round(jobStaffingRatio * 100)}% staffed. Land revenues are scaling down. Build more housing!`,
+                type: 'negative'
+              });
+            }, 10);
+          } else if (comSpamFactor < 0.8 || indSpamFactor < 0.8 || offSpamFactor < 0.8) {
+            const worstZone = comSpamFactor < indSpamFactor && comSpamFactor < offSpamFactor ? 'Commercial' : indSpamFactor < offSpamFactor ? 'Industrial' : 'Office';
+            setTimeout(() => {
+              addNewsItem({
+                id: (Date.now() + Math.random()).toString(),
+                text: `⚠️ Industry Oversaturation: Too many ${worstZone} buildings constructed. Local market oversaturating; profits are severely penalized!`,
+                type: 'neutral'
+              });
+            }, 10);
+          }
+        }
+
         // Base revenue yields mapped dynamically to level structures and current tax rates
         let residentialYield = 0;
         let commercialYield = 0;
@@ -544,11 +614,14 @@ function App() {
             if (tile.buildingType === BuildingType.Residential) {
               residentialYield += tier.popGen * 0.4 * (rTax / 10); // residential yields tax based on active pop index
             } else if (isCommercialType(tile.buildingType)) {
-              commercialYield += tier.incomeGen * (cTax / 10);
+              // Yield depends on staffing index and spam factor
+              commercialYield += tier.incomeGen * (cTax / 10) * jobStaffingRatio * comSpamFactor;
             } else if (isIndustrialType(tile.buildingType)) {
-              industrialYield += tier.incomeGen * (iTax / 10);
+              // Yield depends on staffing index and spam factor
+              industrialYield += tier.incomeGen * (iTax / 10) * jobStaffingRatio * indSpamFactor;
             } else if (tile.buildingType === BuildingType.Office) {
-              officeYield += tier.incomeGen * (oTax / 10);
+              // Yield depends on staffing index and spam factor
+              officeYield += tier.incomeGen * (oTax / 10) * jobStaffingRatio * offSpamFactor;
             }
           }
         });
@@ -648,11 +721,6 @@ function App() {
 
         // Citizen Simulation & Jobs Index
         // Factories (indLevelSum), Shops (comLevelSum), Offices (offLevelSum), and municipal services create jobs
-        const totalJobs = (comLevelSum * 8) + (indLevelSum * 15) + (offLevelSum * 12) +
-                          (policeLevelSum * 6) + (fireLevelSum * 6) + (hospitalLevelSum * 8) + (schoolLevelSum * 8) +
-                          (powerPlantLevelSum * 4);
-        
-        const workforce = Math.round(prev.population * 0.65);
         const occupiedJobs = Math.min(workforce, totalJobs);
         const unemployedCount = Math.max(0, workforce - occupiedJobs);
         const unemploymentRate = workforce === 0 ? 0 : Math.round((unemployedCount / workforce) * 100);
@@ -814,6 +882,11 @@ function App() {
           demandRes: demandResNew,
           demandCom: demandComNew,
           demandInd: demandIndNew,
+          jobStaffingRatio,
+          comSpamFactor,
+          indSpamFactor,
+          offSpamFactor,
+          totalJobs,
         };
 
         return newStats;
@@ -1190,6 +1263,15 @@ function App() {
         ::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
         ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+
+        /* Hide scrollbars for hideable scroll views (like subnavbar) */
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none;  /* IE and Edge */
+          scrollbar-width: none;  /* Firefox */
+        }
       `}</style>
     </div>
   );

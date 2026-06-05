@@ -606,53 +606,6 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
 
               <div className="w-px h-6 bg-slate-800 hidden md:block"></div>
 
-              {/* Land value index */}
-              <div className="flex flex-col">
-                <span className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-0.5 font-sans">Land Value</span>
-                <span className="text-xs md:text-sm font-bold text-emerald-400 font-mono leading-none">
-                  ${stats.landValue}/m²
-                </span>
-              </div>
-
-              <div className="w-px h-6 bg-slate-800 hidden md:block"></div>
-
-              {/* Micro Demand Bars (🟩 🟦 🟨) */}
-              <div className="flex flex-col items-start gap-1 justify-center">
-                <span className="text-[7.2px] text-slate-500 font-bold uppercase tracking-wider leading-none">Demand</span>
-                <div className="flex items-center gap-1.5 h-6">
-                  <div className="flex items-center gap-0.5 h-full">
-                    {/* Residential (Green) */}
-                    <div className="w-1.5 h-full bg-slate-800 rounded-sm relative overflow-hidden flex flex-col justify-end" title={`Residential: ${stats.demandRes}%`}>
-                      <div className="w-full bg-green-500 rounded-sm transition-all duration-500" style={{ height: `${stats.demandRes}%` }}></div>
-                    </div>
-                    {/* Commercial (Blue) */}
-                    <div className="w-1.5 h-full bg-slate-800 rounded-sm relative overflow-hidden flex flex-col justify-end" title={`Commercial: ${stats.demandCom}%`}>
-                      <div className="w-full bg-blue-500 rounded-sm transition-all duration-400" style={{ height: `${stats.demandCom}%` }}></div>
-                    </div>
-                    {/* Industrial (Yellow) */}
-                    <div className="w-1.5 h-full bg-slate-800 rounded-sm relative overflow-hidden flex flex-col justify-end" title={`Industrial: ${stats.demandInd}%`}>
-                      <div className="w-full bg-amber-400 rounded-sm transition-all duration-400" style={{ height: `${stats.demandInd}%` }}></div>
-                    </div>
-                  </div>
-                  {/* Actual demand values */}
-                  <div className="flex flex-col text-[7px] md:text-[8px] font-mono leading-none text-slate-300">
-                    <span className="text-green-400 font-bold">R:{stats.demandRes}%</span>
-                    <span className="text-blue-400 font-bold">C:{stats.demandCom}%</span>
-                    <span className="text-amber-400 font-bold">I:{stats.demandInd}%</span>
-                  </div>
-                  {/* Help Button */}
-                  <button
-                    onClick={() => setShowHelpMenu(true)}
-                    className="w-4 h-4 rounded-full bg-slate-800 hover:bg-slate-700 hover:border-indigo-400 border border-slate-700 flex items-center justify-center text-[10px] text-slate-300 font-mono font-bold hover:text-white transition-all cursor-pointer pointer-events-auto shadow-sm"
-                    title="Explain RCI demand and other systems (?)"
-                  >
-                    ?
-                  </button>
-                </div>
-              </div>
-
-              <div className="w-px h-6 bg-slate-800 hidden md:block"></div>
-
               {/* Day index */}
               <div className="flex flex-col items-end pr-1">
                 <span className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none">Day</span>
@@ -912,7 +865,8 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
 
       {/* MID PANEL: Mayor Dashboard Modal */}
       {showDashboard && (
-        <div className="m-auto lg:w-[480px] w-full max-w-full bg-slate-950/95 Border border-indigo-500/30 rounded-2xl shadow-[0_0_35px_rgba(0,0,0,0.8)] pointer-events-auto p-4 md:p-5 flex flex-col gap-4 animate-fade-in z-40 max-h-[75vh] overflow-y-auto no-scrollbar">
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-xs pointer-events-auto">
+          <div className="lg:w-[480px] w-full max-w-full bg-slate-950/95 border border-indigo-500/30 rounded-2xl shadow-[0_0_35px_rgba(0,0,0,0.8)] p-4 md:p-5 flex flex-col gap-4 animate-fade-in max-h-[85vh] overflow-y-auto no-scrollbar">
           {/* Header */}
           <div className="flex justify-between items-center border-b border-slate-800 pb-2.5">
             <div className="flex items-center gap-2">
@@ -977,6 +931,33 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                 if (stats.ratingServices < 80) alerts.push({ text: "🚓 Emergency services (Police & Fire & Medical) coverage gaps. Expand station buildings.", urgent: true });
                 if (stats.unemployment > 15) alerts.push({ text: "💼 High Unemployment! Residents are idle. Build Commercial or Industrial zones to expand jobs.", urgent: false });
                 if (stats.traffic < 70) alerts.push({ text: "🛣️ Traffic gridlock in central transit sectors. Boost transit networks.", urgent: false });
+                
+                // Staffing and spam alerts
+                if (stats.totalJobs && stats.totalJobs > 0 && stats.jobStaffingRatio !== undefined && stats.jobStaffingRatio < 0.95) {
+                  const staffedPct = Math.round(stats.jobStaffingRatio * 100);
+                  alerts.push({
+                    text: `👥 Labor deficit! Businesses are only ${staffedPct}% staffed due to underpopulation. Build Residential zones to supply workers.`,
+                    urgent: stats.jobStaffingRatio < 0.5
+                  });
+                }
+                if (stats.comSpamFactor !== undefined && stats.comSpamFactor < 0.9) {
+                  alerts.push({
+                    text: `💰 Commercial zone spam! Local sales revenue is cut by ${Math.round((1 - stats.comSpamFactor) * 100)}% due to oversaturation. Diverify into Industrial or Offices.`,
+                    urgent: false
+                  });
+                }
+                if (stats.indSpamFactor !== undefined && stats.indSpamFactor < 0.9) {
+                  alerts.push({
+                    text: `🏭 Industrial zone spam! Factory revenue is cut by ${Math.round((1 - stats.indSpamFactor) * 100)}% due to oversaturation. Diverify into Commercial or Offices.`,
+                    urgent: false
+                  });
+                }
+                if (stats.offSpamFactor !== undefined && stats.offSpamFactor < 0.9) {
+                  alerts.push({
+                    text: `🏢 Office zone spam! Corporate revenue is cut by ${Math.round((1 - stats.offSpamFactor) * 100)}% due to oversaturation. Diverify into Commercial or Industrial.`,
+                    urgent: false
+                  });
+                }
 
                 return (
                   <div className="bg-slate-900 border border-slate-850 p-2 rounded-xl text-[10.5px]">
@@ -1051,6 +1032,37 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                     desc: "Measures citizens employed successfully in local zone jobs.",
                     icon: "💼",
                     rec: "Build: Commercial, Industrial, or Offices"
+                  },
+                  {
+                    name: "Zoning RCI Demand Rating",
+                    val: Math.round((stats.demandRes + stats.demandCom + stats.demandInd) / 3),
+                    desc: "Sustains expansion rates based on zoning supply balance.",
+                    icon: "📈",
+                    rec: "Build corresponding zones to balance demand ratio.",
+                    customContent: (
+                      <div className="flex flex-col gap-1 w-full mt-1 bg-slate-950/40 p-1.5 rounded-lg border border-slate-800/80">
+                        <span className="text-[7.5px] text-slate-400 font-sans leading-none mb-1">RCI demand levels for residential, commercial and industrial grids:</span>
+                        <div className="flex items-center gap-2">
+                          <div className="flex gap-1 h-5 flex-1 items-end bg-slate-900 rounded p-0.5 justify-center">
+                            <div className="w-2.5 bg-green-500 rounded-sm transition-all duration-500" style={{ height: `${stats.demandRes}%` }} title={`Residential: ${stats.demandRes}%`}></div>
+                            <div className="w-2.5 bg-blue-500 rounded-sm transition-all duration-400" style={{ height: `${stats.demandCom}%` }} title={`Commercial: ${stats.demandCom}%`}></div>
+                            <div className="w-2.5 bg-amber-400 rounded-sm transition-all duration-400" style={{ height: `${stats.demandInd}%` }} title={`Industrial: ${stats.demandInd}%`}></div>
+                          </div>
+                          <div className="flex flex-col text-[7px] font-mono leading-tight text-slate-300 flex-shrink-0">
+                            <span className="text-green-400">R: {stats.demandRes}%</span>
+                            <span className="text-blue-400">C: {stats.demandCom}%</span>
+                            <span className="text-amber-400">I: {stats.demandInd}%</span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  },
+                  {
+                    name: "Citizen Land Value Index",
+                    val: Math.min(100, Math.max(0, Math.round((stats.landValue / 500) * 100))),
+                    desc: `Properties are currently valued at $${stats.landValue}/m² average on the local land index.`,
+                    icon: "💵",
+                    rec: "Upgrade services and parks nearby to boost values."
                   }
                 ].map((need, index) => {
                   const percentColor = need.val >= 85 ? 'text-green-400' : need.val >= 60 ? 'text-yellow-400' : 'text-red-400';
@@ -1070,9 +1082,11 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                         <div className={`h-full ${barBgColor} rounded-full transition-all duration-700`} style={{ width: `${need.val}%` }}></div>
                       </div>
 
-                      <p className="text-[8px] md:text-[8.5px] leading-snug text-slate-400 font-sans">{need.desc}</p>
+                      {need.desc && <p className="text-[8px] md:text-[8.5px] leading-snug text-slate-400 font-sans">{need.desc}</p>}
                       
-                      <div className="bg-slate-950/50 px-1.5 py-0.5 rounded text-[7.5px] font-mono text-indigo-400 flex justify-between items-baseline select-none text-left">
+                      {need.customContent}
+
+                      <div className="bg-slate-950/50 px-1.5 py-0.5 rounded text-[7.5px] font-mono text-indigo-400 flex justify-between items-baseline select-none text-left mt-auto">
                         <span>Recom:</span>
                         <span className="font-semibold">{need.rec}</span>
                       </div>
@@ -1096,6 +1110,40 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
 
               {(['residential', 'commercial', 'industrial', 'office'] as const).map(cat => {
                 const value = stats.taxRates?.[cat] ?? 10;
+                
+                let modifiersText = null;
+                if (cat === 'commercial' && (stats.jobStaffingRatio !== undefined || stats.comSpamFactor !== undefined)) {
+                  const staffStr = stats.jobStaffingRatio !== undefined ? `${Math.round(stats.jobStaffingRatio * 100)}%` : '100%';
+                  const spamStr = stats.comSpamFactor !== undefined ? `${Math.round(stats.comSpamFactor * 100)}%` : '100%';
+                  modifiersText = (
+                    <div className="flex gap-2 text-[8px] font-mono text-slate-450 mt-1 select-none">
+                      <span>Staffing efficiency: <strong className={stats.jobStaffingRatio && stats.jobStaffingRatio < 1.0 ? "text-amber-400" : "text-emerald-400"}>{staffStr}</strong></span>
+                      <span>•</span>
+                      <span>Market diversity: <strong className={stats.comSpamFactor && stats.comSpamFactor < 1.0 ? "text-amber-500" : "text-emerald-400"}>{spamStr}</strong></span>
+                    </div>
+                  );
+                } else if (cat === 'industrial' && (stats.jobStaffingRatio !== undefined || stats.indSpamFactor !== undefined)) {
+                  const staffStr = stats.jobStaffingRatio !== undefined ? `${Math.round(stats.jobStaffingRatio * 100)}%` : '100%';
+                  const spamStr = stats.indSpamFactor !== undefined ? `${Math.round(stats.indSpamFactor * 100)}%` : '100%';
+                  modifiersText = (
+                    <div className="flex gap-2 text-[8px] font-mono text-slate-450 mt-1 select-none">
+                      <span>Staffing efficiency: <strong className={stats.jobStaffingRatio && stats.jobStaffingRatio < 1.0 ? "text-amber-400" : "text-emerald-400"}>{staffStr}</strong></span>
+                      <span>•</span>
+                      <span>Market diversity: <strong className={stats.indSpamFactor && stats.indSpamFactor < 1.0 ? "text-amber-500" : "text-emerald-400"}>{spamStr}</strong></span>
+                    </div>
+                  );
+                } else if (cat === 'office' && (stats.jobStaffingRatio !== undefined || stats.offSpamFactor !== undefined)) {
+                  const staffStr = stats.jobStaffingRatio !== undefined ? `${Math.round(stats.jobStaffingRatio * 100)}%` : '100%';
+                  const spamStr = stats.offSpamFactor !== undefined ? `${Math.round(stats.offSpamFactor * 100)}%` : '100%';
+                  modifiersText = (
+                    <div className="flex gap-2 text-[8px] font-mono text-slate-450 mt-1 select-none">
+                      <span>Staffing efficiency: <strong className={stats.jobStaffingRatio && stats.jobStaffingRatio < 1.0 ? "text-amber-400" : "text-emerald-400"}>{staffStr}</strong></span>
+                      <span>•</span>
+                      <span>Market diversity: <strong className={stats.offSpamFactor && stats.offSpamFactor < 1.0 ? "text-amber-500" : "text-emerald-400"}>{spamStr}</strong></span>
+                    </div>
+                  );
+                }
+
                 return (
                   <div key={cat} className="flex flex-col gap-1 building-card border border-slate-800/40 p-2.5 rounded-xl bg-slate-900/30">
                     <div className="flex justify-between items-center text-[11px] md:text-xs">
@@ -1111,6 +1159,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                       onChange={(e) => handleTaxChange(cat, parseInt(e.target.value))}
                       className="w-full accent-indigo-500 h-1 md:h-1.5 bg-slate-800 rounded-lg cursor-pointer"
                     />
+                    {modifiersText}
                   </div>
                 );
               })}
@@ -1288,6 +1337,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
               </div>
             </div>
           )}
+          </div>
         </div>
       )}
 

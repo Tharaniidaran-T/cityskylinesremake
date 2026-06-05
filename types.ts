@@ -100,6 +100,11 @@ export interface CityStats {
   demandRes: number; // 0 to 100
   demandCom: number; // 0 to 100
   demandInd: number; // 0 to 100
+  jobStaffingRatio?: number;
+  comSpamFactor?: number;
+  indSpamFactor?: number;
+  offSpamFactor?: number;
+  totalJobs?: number;
 }
 
 export interface AIGoal {
